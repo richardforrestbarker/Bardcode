@@ -163,12 +163,6 @@ public class OpenFoodFactsApiProvider : ApiProviderConfiguration
         return Task.FromResult(false);
     }
 
-    public override async Task<bool> IsResponseKosher(HttpResponseMessage response)
-    {
-        if (!await base.IsResponseKosher(response)) return false;
-        return true;
-    }
-
     public override Task<HttpClient> GetHttpClient()
     {
         var client = new HttpClient();
