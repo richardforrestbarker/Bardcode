@@ -159,6 +159,184 @@ Configuration files are located in:
 - `Bardcoded.ApiService/appsettings.json` - API service configuration
 - `Bardcoded.Wasm/wwwroot/appsettings.json` - Frontend configuration
 
+### Barcode Data Providers
+
+Bardcode uses external APIs to retrieve product information from barcodes. The system supports multiple barcode data providers that are configured in `Bardcoded.ApiService/appsettings.json` under the `Application.Integrations` section.
+
+#### Supported Providers
+
+The application includes three barcode data providers, each with different features, costs, and requirements:
+
+##### 1. UPC Database
+
+**Website:** https://upcdatabase.org/
+
+**Features:**
+- Supports UPC barcodes
+- Requires API key authentication
+- Provides product titles, descriptions, and images
+
+**Account Setup:**
+1. Create an account at https://upcdatabase.org/
+2. Navigate to your account settings to generate an API key
+3. Copy your API key
+
+**Rate Limits & Pricing:**
+- Free tier: 100 requests per day
+- Paid plans available with higher limits
+- See https://upcdatabase.org/api for current pricing and rate limits
+
+**License:**
+- Review the terms of service at https://upcdatabase.org/terms
+
+**Configuration:**
+
+In `Bardcoded.ApiService/appsettings.json`, update the UPC Database provider configuration:
+
+```json
+{
+  "$type": "UpcDatabaseApiProvider",
+  "url": "https://api.upcdatabase.org",
+  "path": "product/{barcode}",
+  "key": "YOUR_API_KEY_HERE",
+  "allowedBarcodeTypes": [ "UPC" ]
+}
+```
+
+Replace `YOUR_API_KEY_HERE` with your actual API key from UPC Database.
+
+##### 2. Open Food Facts
+
+**Website:** https://world.openfoodfacts.org/
+
+**Features:**
+- Free and open database
+- No API key required
+- Supports EAN-13, EAN-8, UPC-A, UPC-E barcodes
+- Primarily focused on food products
+- Community-driven database
+
+**Account Setup:**
+- No account or API key required
+- Optional: Create an account to contribute product data
+
+**Rate Limits & Pricing:**
+- Completely free
+- Fair use policy: Please be respectful of the API and avoid excessive requests
+- See https://world.openfoodfacts.org/data for API documentation
+
+**License:**
+- Open Database License (ODbL)
+- Data is freely available
+- Read more at https://world.openfoodfacts.org/terms-of-use
+
+**Configuration:**
+
+The default configuration in `Bardcoded.ApiService/appsettings.json` works without modification:
+
+```json
+{
+  "$type": "OpenFoodFactsApiProvider",
+  "url": "https://world.openfoodfacts.org",
+  "path": "api/v2/product/{barcode}.json",
+  "key": "",
+  "allowedBarcodeTypes": [ "EAN-13", "EAN-8", "UPC-A", "UPC-E" ]
+}
+```
+
+No API key is needed for Open Food Facts.
+
+##### 3. Barcode Lookup
+
+**Website:** https://www.barcodelookup.com/
+
+**Features:**
+- Comprehensive barcode database
+- Supports UPC-A, UPC-E, EAN-13, EAN-8, ISBN-10, ISBN-13
+- Provides detailed product information including features, images, and metadata
+- Commercial-grade API
+
+**Account Setup:**
+1. Create an account at https://www.barcodelookup.com/
+2. Sign up for an API plan at https://www.barcodelookup.com/api
+3. Copy your API key from your account dashboard
+
+**Rate Limits & Pricing:**
+- Free tier: Limited requests per month (check current limits)
+- Paid plans: Various tiers with different rate limits
+- See https://www.barcodelookup.com/api#plans for current pricing
+- Rate limit documentation: https://www.barcodelookup.com/api#rate-limiting
+
+**License:**
+- Commercial API with terms of service
+- Review the API License Agreement at https://www.barcodelookup.com/api#license
+- End User License Agreement: https://www.barcodelookup.com/eula
+
+**Configuration:**
+
+In `Bardcoded.ApiService/appsettings.json`, update the Barcode Lookup provider configuration:
+
+```json
+{
+  "$type": "BarcodeLookupApiProvider",
+  "url": "https://api.barcodelookup.com",
+  "path": "v3/products?barcode={barcode}&key=",
+  "key": "YOUR_API_KEY_HERE",
+  "allowedBarcodeTypes": [ "UPC-A", "UPC-E", "EAN-13", "EAN-8", "ISBN-10", "ISBN-13" ]
+}
+```
+
+Replace `YOUR_API_KEY_HERE` with your actual API key from Barcode Lookup.
+
+#### Provider Priority
+
+The system queries providers in the order they appear in the configuration file. Once a provider successfully returns product data, subsequent providers are not queried. You can reorder the providers in `appsettings.json` to change the priority.
+
+#### Disabling Providers
+
+To disable a provider, you can either:
+- Remove it from the `Application.Integrations` array in `appsettings.json`
+- Leave the `key` field empty (for providers that require authentication)
+
+#### Example Complete Configuration
+
+Here's an example of a complete configuration with all three providers:
+
+```json
+"Application": {
+  "Integrations": [
+    {
+      "$type": "OpenFoodFactsApiProvider",
+      "url": "https://world.openfoodfacts.org",
+      "path": "api/v2/product/{barcode}.json",
+      "key": "",
+      "allowedBarcodeTypes": [ "EAN-13", "EAN-8", "UPC-A", "UPC-E" ]
+    },
+    {
+      "$type": "UpcDatabaseApiProvider",
+      "url": "https://api.upcdatabase.org",
+      "path": "product/{barcode}",
+      "key": "your-upcdatabase-key",
+      "allowedBarcodeTypes": [ "UPC" ]
+    },
+    {
+      "$type": "BarcodeLookupApiProvider",
+      "url": "https://api.barcodelookup.com",
+      "path": "v3/products?barcode={barcode}&key=",
+      "key": "your-barcodelookup-key",
+      "allowedBarcodeTypes": [ "UPC-A", "UPC-E", "EAN-13", "EAN-8", "ISBN-10", "ISBN-13" ]
+    }
+  ],
+  "Features": {
+    "FetchFromApis": true,
+    "UseDatabase": true,
+    "UseCache": false
+  }
+}
+```
+
+In this example, Open Food Facts is queried first (free and no rate limits), followed by UPC Database, and finally Barcode Lookup.
+
 ## License
 
 [Specify your license here]
