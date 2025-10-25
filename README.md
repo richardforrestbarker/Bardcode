@@ -191,19 +191,55 @@ The application includes three barcode data providers, each with different featu
 
 **Configuration:**
 
-In `Bardcoded.ApiService/appsettings.json`, update the UPC Database provider configuration:
+The UPC Database provider is pre-configured in `Bardcoded.ApiService/appsettings.json` with an empty `key` field:
 
 ```json
 {
   "$type": "UpcDatabaseApiProvider",
   "url": "https://api.upcdatabase.org",
   "path": "product/{barcode}",
-  "key": "YOUR_API_KEY_HERE",
+  "key": "",
   "allowedBarcodeTypes": [ "UPC" ]
 }
 ```
 
-Replace `YOUR_API_KEY_HERE` with your actual API key from UPC Database.
+**Setting the API Key (Security Best Practice):**
+
+**IMPORTANT:** Never store API keys directly in configuration files as this is a security risk. Instead, set the API key using an environment variable or command-line argument.
+
+**Option 1: Environment Variable (Recommended)**
+
+Set the environment variable using the hierarchical configuration key format:
+
+```bash
+# Linux/macOS
+export Application__Integrations__0__key="your-api-key-here"
+
+# Windows (Command Prompt)
+set Application__Integrations__0__key=your-api-key-here
+
+# Windows (PowerShell)
+$env:Application__Integrations__0__key="your-api-key-here"
+```
+
+**Note:** The index `0` corresponds to the first provider in the `Integrations` array. Adjust the index based on the provider's position in your configuration.
+
+**Option 2: Command-Line Argument**
+
+When running the application, pass the API key as a command-line argument:
+
+```bash
+dotnet run --project Bardcoded.ApiService/Bardcoded.ApiService.csproj --Application:Integrations:0:key="your-api-key-here"
+```
+
+**Option 3: User Secrets (Development Only)**
+
+For local development, use the .NET user secrets feature:
+
+```bash
+cd Bardcoded.ApiService
+dotnet user-secrets set "Application:Integrations:0:key" "your-api-key-here"
+```
 
 ##### 2. Open Food Facts
 
@@ -274,19 +310,55 @@ No API key is needed for Open Food Facts.
 
 **Configuration:**
 
-In `Bardcoded.ApiService/appsettings.json`, update the Barcode Lookup provider configuration:
+The Barcode Lookup provider is pre-configured in `Bardcoded.ApiService/appsettings.json` with an empty `key` field:
 
 ```json
 {
   "$type": "BarcodeLookupApiProvider",
   "url": "https://api.barcodelookup.com",
   "path": "v3/products?barcode={barcode}&key=",
-  "key": "YOUR_API_KEY_HERE",
+  "key": "",
   "allowedBarcodeTypes": [ "UPC-A", "UPC-E", "EAN-13", "EAN-8", "ISBN-10", "ISBN-13" ]
 }
 ```
 
-Replace `YOUR_API_KEY_HERE` with your actual API key from Barcode Lookup.
+**Setting the API Key (Security Best Practice):**
+
+**IMPORTANT:** Never store API keys directly in configuration files as this is a security risk. Instead, set the API key using an environment variable or command-line argument.
+
+**Option 1: Environment Variable (Recommended)**
+
+Set the environment variable using the hierarchical configuration key format:
+
+```bash
+# Linux/macOS
+export Application__Integrations__2__key="your-api-key-here"
+
+# Windows (Command Prompt)
+set Application__Integrations__2__key=your-api-key-here
+
+# Windows (PowerShell)
+$env:Application__Integrations__2__key="your-api-key-here"
+```
+
+**Note:** The index `2` corresponds to the third provider in the `Integrations` array (Barcode Lookup is third by default). Adjust the index based on the provider's position in your configuration.
+
+**Option 2: Command-Line Argument**
+
+When running the application, pass the API key as a command-line argument:
+
+```bash
+dotnet run --project Bardcoded.ApiService/Bardcoded.ApiService.csproj --Application:Integrations:2:key="your-api-key-here"
+```
+
+**Option 3: User Secrets (Development Only)**
+
+For local development, use the .NET user secrets feature:
+
+```bash
+cd Bardcoded.ApiService
+dotnet user-secrets set "Application:Integrations:2:key" "your-api-key-here"
+```
 
 #### Provider Priority
 
@@ -300,7 +372,7 @@ To disable a provider, you can either:
 
 #### Example Complete Configuration
 
-Here's an example of a complete configuration with all three providers:
+Here's an example of the complete configuration in `appsettings.json` with all three providers. **Note:** The `key` fields should remain empty in the configuration file.
 
 ```json
 "Application": {
@@ -316,14 +388,14 @@ Here's an example of a complete configuration with all three providers:
       "$type": "UpcDatabaseApiProvider",
       "url": "https://api.upcdatabase.org",
       "path": "product/{barcode}",
-      "key": "your-upcdatabase-key",
+      "key": "",
       "allowedBarcodeTypes": [ "UPC" ]
     },
     {
       "$type": "BarcodeLookupApiProvider",
       "url": "https://api.barcodelookup.com",
       "path": "v3/products?barcode={barcode}&key=",
-      "key": "your-barcodelookup-key",
+      "key": "",
       "allowedBarcodeTypes": [ "UPC-A", "UPC-E", "EAN-13", "EAN-8", "ISBN-10", "ISBN-13" ]
     }
   ],
@@ -335,7 +407,19 @@ Here's an example of a complete configuration with all three providers:
 }
 ```
 
-In this example, Open Food Facts is queried first (free and no rate limits), followed by UPC Database, and finally Barcode Lookup.
+**Setting API Keys Securely:**
+
+Set the API keys using environment variables instead of hardcoding them in the configuration:
+
+```bash
+# Set UPC Database API key (index 1)
+export Application__Integrations__1__key="your-upcdatabase-key"
+
+# Set Barcode Lookup API key (index 2)
+export Application__Integrations__2__key="your-barcodelookup-key"
+```
+
+In this example, Open Food Facts is queried first (free and no authentication required), followed by UPC Database, and finally Barcode Lookup.
 
 ## License
 
