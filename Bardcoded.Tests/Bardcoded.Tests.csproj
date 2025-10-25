@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bardcoded.AppHost\Bardcoded.AppHost.csproj" />
+    <ProjectReference Include="..\Bardcoded.ApiService\Bardcoded.ApiService.csproj" />
+    <ProjectReference Include="..\Bardcoded.Data\Bardcoded.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
