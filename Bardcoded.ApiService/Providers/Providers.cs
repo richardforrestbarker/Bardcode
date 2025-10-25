@@ -180,6 +180,8 @@ public class OpenFoodFactsApiProvider : ApiProviderConfiguration
 
 public class BarcodeLookupApiProvider : ApiProviderConfiguration
 {
+    private const int MaxFeaturesToInclude = 3;
+
     public override async Task<BarcodeView> Translate(HttpResponseMessage res)
     {
         var body = res.Content;
@@ -193,16 +195,17 @@ public class BarcodeLookupApiProvider : ApiProviderConfiguration
         {
             productResponse = JsonSerializer.Deserialize<BarcodeLookupProductResponse>(contentString);
         }
-        catch
+        catch (JsonException jsonEx)
         {
+            Console.WriteLine($"{nameof(BarcodeLookupApiProvider)}: Failed to deserialize product response: {jsonEx.Message}");
             // Try error response
             try
             {
                 errorResponse = JsonSerializer.Deserialize<BarcodeLookupErrorResponse>(contentString);
             }
-            catch
+            catch (JsonException errorEx)
             {
-                // Ignore
+                Console.WriteLine($"{nameof(BarcodeLookupApiProvider)}: Failed to deserialize error response: {errorEx.Message}");
             }
         }
 
@@ -259,7 +262,7 @@ public class BarcodeLookupApiProvider : ApiProviderConfiguration
             parts.Add($"Size: {product.Size}");
 
         if (product.Features != null && product.Features.Length > 0)
-            parts.Add($"Features: {string.Join(", ", product.Features.Take(3))}");
+            parts.Add($"Features: {string.Join(", ", product.Features.Take(MaxFeaturesToInclude))}");
 
         return parts.Count > 0 ? string.Join(". ", parts) : "No description available";
     }
