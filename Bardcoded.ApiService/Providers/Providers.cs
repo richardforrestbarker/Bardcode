@@ -52,7 +52,7 @@ public class ApiProviderConfiguration
     [JsonExtensionData] public Dictionary<string, JsonElement> UnknownFields { get; set; }
     public virtual Task<bool> IsOverRates()
     {
-        return Task.FromResult(Rate != null && RateLimit != null && Rate.Count > RateLimit.Limit);
+        return Task.FromResult(Rate != null && RateLimit != null && Rate.Count >= RateLimit.Limit);
     }
 
     public virtual Task UpdateRates()
