@@ -50,7 +50,6 @@ foreach (var integration in integrations ?? Enumerable.Empty<ApiProviderConfigur
 }
 builder.Services.AddSingleton(providers);
 builder.Services.AddHostedService<RateResetService>();
-//builder.Services.AddDbContext<BarcodeDataContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddDbContext<IBarcodeDataContext, BarcodeDataContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
