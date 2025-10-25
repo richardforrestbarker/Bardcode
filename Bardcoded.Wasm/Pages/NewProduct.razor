@@ -1,0 +1,169 @@
+﻿@page "/add/{Bard}"
+
+@using Bardcoded.Data.Exceptions
+@using Bardcoded.Data.Messages
+@using Bardcoded.Wasm.Clients
+@using Bardcoded.Wasm.Components
+
+<PageTitle>Add this barcode?</PageTitle>
+
+<EditForm Model="Model" OnValidSubmit="AddToDatabase">
+    <DataAnnotationsValidator />
+    <div class="">
+        <label>
+            Give me a shot of the product.
+            <br />
+            <small>with the product's brand or label in view</small>
+        </label>
+        <InputFile OnChange="c=>Changed(c)"
+                   AdditionalAttributes="adds" />
+    </div>
+    @if (Model.Base64Image != null && Model.ImageType != null)
+    {
+        <div class="">
+            <div><img style="max-width=@Width;max-height:@Height" height="@Height" width="@Width" src="data:image/@Model.ImageType;base64,@Model.Base64Image" /> </div>
+            <label>What is it?</label>
+            <InputText DisplayName="Name" @bind-Value="Model.Name"></InputText>
+
+            <label>Brand, flavor, etc.</label>
+            <InputTextArea DisplayName="Description" @bind-Value="@Model.Description"></InputTextArea>
+
+            <label>
+                What's it's weight (ounce, gram, pound) or volume (liter, cup, gallon)?
+                <small>Include the desginator i.e. '1 lt' or '1 liter'</small>
+            </label>
+            <InputText DisplayName="Weight / Volume" @bind-Value="Model.WeightVolume" placeholder="'16 oz' or '1 lb' or '1 gallon'"></InputText>
+        </div>
+    }
+    <div>
+        <ValidationSummary />
+        @if (Error != null)
+        {
+            <Notification>
+                <Header>
+                    <strong>Ouf! Something didn't go right.</strong>
+                    <hr/>
+                    <small>@Error.Message</small>
+                </Header>
+                <Message>
+                    <div>
+                        @if (Error is ApiErrorResponseException apiError)
+                        {
+                            <p>The server reported a '@apiError.StatusCode' for @apiError.Bard</p>
+                            @if (apiError.Result != null)
+                            {
+                                <p>
+                                    @apiError.Result.Title - @apiError.Result.Detail
+                                </p>
+                            }
+                        }
+                        else if (Error is DataConflictException conflict)
+                        {
+                            <p>@conflict.Actual.Bard</p>
+                        }
+                    </div>
+                </Message>
+            </Notification>
+            return;
+        }
+    </div>
+    <div class="btn-group">
+        <button type="submit" class="btn btn-primary">Add it</button>
+        <button type="button" class="btn btn-danger">Reset</button>
+    </div>
+</EditForm>
+
+
+
+@code {
+    [Inject] public BardcodeApiHttpClient Http { get; set; }
+    [Inject] public NavigationManager navMan { get; set; }
+    
+    [Parameter] public string Bard { get; set; }
+    [Parameter] public int Height { get; set; } = 1280;
+    [Parameter] public int Width { get; set; } = 1280;
+    private Exception Error;
+    private bool loading;
+
+    private BardcodeInjestRequest Model { get; set; }
+
+    private Dictionary<String, object?> adds = new Dictionary<string, object?>()
+    {
+        {"accepts", "image/*"},
+        {"capture", "environment"}
+    };
+
+    protected override Task OnInitializedAsync()
+    {
+        resetModel();
+        return base.OnInitializedAsync();
+    }
+
+    private void resetModel()
+    {
+        Model = new BardcodeInjestRequest();
+        Model.Bard = Bard;
+        Model.Source = "Manually Injested";
+    }
+
+    private async void AddToDatabase()
+    {
+        loading = true;
+        StateHasChanged();
+        try
+        {
+            var res = await Http.CreateItem(Model);
+            Console.WriteLine($"recieved {res?.Code}");
+            if (res != null)
+            {
+                navMan.NavigateTo($"item/{Model.Bard}");
+            }
+        }
+        catch (OfflineException offline)
+        {
+            Error = offline;
+            //triggerDegradedState();
+        }
+        catch (Exception e)
+        {
+            Error = e;
+        }
+        loading = false;
+        StateHasChanged();
+    }
+
+    public async void Changed(InputFileChangeEventArgs change)
+    {
+
+        if (change.FileCount != 1)
+        {
+            Error = new ArgumentOutOfRangeException("Only one file at a time.");
+            StateHasChanged();
+            return;
+        }
+        if (change.FileCount == 0 || change.File == null)
+        {
+            Error = new ArgumentNullException("Select a file. . .");
+            StateHasChanged();
+            return;
+        }
+
+        using (var stream = change.File.OpenReadStream(maxAllowedSize: Height * Width * 4 + 512000))
+        {
+            if (stream.Length == 0)
+            {
+                Error = new InvalidOperationException("No 0 size files.");
+                StateHasChanged();
+                return;
+            }
+            var bytes = new byte[stream.Length];
+            loading = true;
+            StateHasChanged();
+            await stream.ReadAsync(bytes, 0, bytes.Length);
+            Model.Base64Image = Convert.ToBase64String(bytes);
+            Model.ImageType = change.File?.Name?.Split(".").Last().ToLower() ?? "png";
+            loading = false;
+            StateHasChanged();
+        }
+    }
+}

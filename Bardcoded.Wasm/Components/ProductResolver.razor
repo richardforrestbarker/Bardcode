@@ -1,0 +1,134 @@
+﻿@using Bardcoded.Data.Exceptions
+@using Bardcoded.Data.Messages
+@using Bardcoded.Wasm.Clients
+@using Bardcoded.Wasm.Components.Barcode
+
+<h3>Resolve a Product by its Barcode.</h3>
+
+@if (Status.Equals(ScanStatus.Scanning))
+{
+    <Bardcoded.Wasm.Components.Barcode.BarcodeReader 
+        FailureCallback=NoBarcodeScanned 
+        SuccessCallback="BarcodeSuccessfullyScanned" />
+}
+else if (Status.Equals(ScanStatus.BarcodeUnreadable))
+{
+    <p><span id="errorMsg">I wasn't able to read that barcode. Please retry.</span></p>
+}
+else if (Status.Equals(ScanStatus.Searching))
+{
+    <div><small>@Result!.BarcodeFormat:</small>&nbsp;@Result.Text</div>
+    <p><span id="searchingMsg">Searching for product...</span></p>
+}
+else if (Status.Equals(ScanStatus.ProductFound))
+{
+    <div>@barcodeView!.Name</div>
+    <div>@barcodeView.Description</div>
+    <div class="btn-group">
+        <a class="btn btn-outline-primary" href="update/@barcodeView.Code">Update Information</a>
+    </div>
+}
+else if (Status.Equals(ScanStatus.ProductNotFound))
+{
+    <div class="btn-group">
+        <a class="btn btn-outline-primary" href="add/@Result.Text">Add To Database</a>
+    </div>
+}
+else if (Error != null)
+{
+    <Notification>
+        <Header>
+            <strong>Ouf! Something didn't go right.</strong>
+        </Header>
+        <Message>
+            @if (Error is ApiErrorResponseException apiError)
+            {
+                <p>The server reported a '@apiError.StatusCode' for @apiError.Bard</p>
+                @if (apiError.Result != null)
+                {
+                    <p>
+                        @apiError.Result.Title - @apiError.Result.Detail
+                    </p>
+                }
+            }
+            else
+            {
+                <p>@Error.Message</p>
+            }
+        </Message>
+    </Notification>
+}
+<hr/>
+<div class="btn-group">
+    <button class="btn btn-outline-warning" type="reset" @onclick="Reset">Reset</button>
+</div>
+
+@code {
+    [Inject] public BardcodeApiHttpClient client { get; set; }
+
+    private bool loading = true;
+    private ScanStatus Status { get; set; } = ScanStatus.Scanning;
+    private BarcodeResult? Result { get; set; } = null;
+    private BarcodeView? barcodeView { get; set; } = null;
+    private Exception? Error { get; set; } = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        loading = false;
+    }
+
+    public async Task NoBarcodeScanned()
+    {
+        Status = ScanStatus.BarcodeUnreadable;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task BarcodeSuccessfullyScanned(BarcodeResult barcode)
+    {
+        Status = ScanStatus.Searching;
+        Result = barcode;
+        await InvokeAsync(StateHasChanged);
+        await FetchBarcode(barcode.Text, barcode.BarcodeFormat);
+    }
+
+    public async Task FetchBarcode(String barcode, String barcodeType)
+    {
+        try
+        {
+            barcodeView = await client.GetItem(barcode, barcodeType);
+            if (barcodeView != null)
+            {
+                Console.WriteLine($"Product found: {barcodeView.Name}");
+                Status = ScanStatus.ProductFound;
+            }
+            else
+            {
+                Console.WriteLine("Product not found.");
+                Status = ScanStatus.ProductNotFound;
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = ex;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public Task Reset()
+    {
+        Status = ScanStatus.Scanning;
+        Result = null;
+        barcodeView = null;
+        Error = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public enum ScanStatus
+    {
+        Scanning,
+        Searching,
+        BarcodeUnreadable,
+        ProductNotFound,
+        ProductFound
+    }
+}

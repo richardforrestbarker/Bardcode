@@ -1,0 +1,53 @@
+﻿<section>
+    <h5>
+        Select or take an image to scan for a barcode.
+    </h5>
+    <InputFile OnChange="FileChanged" capture="camera" accept="image/png,image/jpg,image/jpeg" />
+    <aside>
+        <p class="small">Note: Only one file maybe scanned at a time, and the image must be clear and well-lit.</p>
+    </aside>
+</section>
+
+
+@code {
+    [Inject] public IJSRuntime IJSRuntime { get; set; }
+    [Parameter] public EventCallback<BarcodeResult> SuccessCallback { get; set; }
+    [Parameter] public EventCallback FailureCallback { get; set; }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+        if (!firstRender) return;
+
+    }
+
+    [JSInvokable]
+    public void BarcodeFound(string value, string format)
+    {
+        SuccessCallback.InvokeAsync(new BarcodeResult() { Text = value, BarcodeFormat = format }).ContinueWith(_ => InvokeAsync(StateHasChanged));
+    }
+
+    [JSInvokable]
+    public void BarcodeNotFound()
+    {
+        FailureCallback.InvokeAsync().ContinueWith(_ => InvokeAsync(StateHasChanged));
+    }
+
+    private async Task FileChanged(InputFileChangeEventArgs args)
+    {
+        if (args.File == null)
+        {
+            return;
+        }
+
+        // Read the file content into a MemoryStream
+        using (var memoryStream = new MemoryStream())
+        {
+            var file = args.File;
+            await file.OpenReadStream(maxAllowedSize: 1024*30000).CopyToAsync(memoryStream);
+            string base64String = Convert.ToBase64String(memoryStream.ToArray());
+            string dataUri = $"data:{file.ContentType};base64,{base64String}";
+            await IJSRuntime.InvokeVoidAsync("window.Barcodes.reader.readFromFile", dataUri, DotNetObjectReference.Create(this));
+        }
+    }
+}

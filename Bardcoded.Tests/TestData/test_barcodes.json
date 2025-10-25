@@ -1,0 +1,51 @@
+{
+  //"content": { // expected decoded results
+  //  "image": "filepath relative to test_barcodes.json",
+  //  "format": "barcode format string",
+  //}
+
+  "0001285112001000040801": {
+    "image": "barcodes/0001285112001000040801.png",
+    "format": "CODE_128"
+  },
+  "B3% $DAD$": {
+    "image": "barcodes/B3DAD.png",
+    "format": "CODE_39"
+  },
+  "A10/53+17-70D": {
+    "image": "barcodes/A10531770D.png",
+    "format": "CODABAR"
+  },
+  "WIWV8ETQZ1": {
+    "image": "barcodes/WIWV8ETQZ1.png",
+    "format": "CODE_93"
+  },
+  "9577149002": {
+    "image": "barcodes/9577149002.png",
+    "format": "2of5"
+  },
+  "2167361334": {
+    "image": "barcodes/2167361334.png",
+    "format": "i2of5"
+  },
+  "882428015268": {
+    "image": "barcodes/882428015268.png",
+    "format": "EAN_13"
+  },
+  "42191605": {
+    "image": "barcodes/42191605.png",
+    "format": "EAN_8"
+  },
+  "900437801102701": {
+    "image": "barcodes/900437801102701.png",
+    "format": "ean_extended"
+  },
+  "3574660239843": {
+    "image": "barcodes/3574660239843.png",
+    "format": "EAN"
+  },
+  "496580": {
+    "image": "barcodes/496580.png",
+    "format": "UPC_E"
+  }
+}

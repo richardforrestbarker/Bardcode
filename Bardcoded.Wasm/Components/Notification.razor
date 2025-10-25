@@ -1,0 +1,19 @@
+﻿<div class="alert alert-danger align-items-sm-baseline" role="alert">
+    <div class="d-flex">
+        <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Danger:"><use xlink:href="#exclamation-triangle-fill" /></svg>
+        <h4 class="pe-3">
+            @Header
+        </h4>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <br />
+    <div class="d-flex ">
+        @Message
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public RenderFragment Header { get; set; }
+    [Parameter] public RenderFragment Message { get; set; }
+}
