@@ -9,7 +9,6 @@ namespace Bardcoded.Tests;
 [Trait("unit", "ApiClient")]
 public class BarcodeLookupApiProviderTests
 {
-    public BarcodeLookupApiProviderTests(){}
 
     // Test data for parameterized tests
     public static TheoryData<string, bool> ResponseTypeData => new()
