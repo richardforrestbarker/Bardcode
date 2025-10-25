@@ -153,7 +153,7 @@ export class ImageBarcodeReader {
                     drawScanline: this.debug,
                     showPattern: this.debug
                 },
-                multiple: true
+                multiple: false
             },
             locate: true, // try to locate the barcode in the image
         };

@@ -6,9 +6,10 @@ using System.Text.Json;
 using Xunit;
 
 namespace Bardcoded.Tests;
-
+[Trait("unit", "ApiClient")]
 public class OpenFoodFactsApiProviderTests
 {
+    public OpenFoodFactsApiProviderTests() { }
     // Test data for parameterized tests
     public static TheoryData<string, bool> ResponseStatusData => new()
     {
@@ -186,7 +187,7 @@ public class OpenFoodFactsApiProviderTests
     public async Task IsOverRates_ReturnsFalse()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateConfigFromJson();
 
         // Act
         var result = await provider.IsOverRates();
@@ -199,7 +200,7 @@ public class OpenFoodFactsApiProviderTests
     public async Task UpdateRates_CompletesSuccessfully()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateConfigFromJson();
 
         // Act & Assert (should not throw)
         await provider.UpdateRates();
@@ -234,7 +235,7 @@ public class OpenFoodFactsApiProviderTests
     public void IsBarcodeTypeAllowed_ValidatesAllowedTypes(string barcodeType, bool expected)
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateConfigFromJson();
 
         // Act
         var result = provider.IsBarcodeTypeAllowed(barcodeType);
@@ -322,6 +323,11 @@ public class OpenFoodFactsApiProviderTests
     // Helper methods
     private OpenFoodFactsApiProvider CreateProviderFromJson()
     {
+        
+        return new OpenFoodFactsApiProvider(CreateConfigFromJson());
+    }
+    private ApiProviderConfiguration CreateConfigFromJson()
+    {
         var configJson = @"{
             ""$type"": ""OpenFoodFactsApiProvider"",
             ""url"": ""https://world.openfoodfacts.org"",
@@ -329,10 +335,9 @@ public class OpenFoodFactsApiProviderTests
             ""key"": """",
             ""allowedBarcodeTypes"": [ ""EAN-13"", ""EAN-8"", ""UPC-A"", ""UPC-E"" ]
         }";
-        
-        return JsonSerializer.Deserialize<OpenFoodFactsApiProvider>(configJson)!;
-    }
 
+        return JsonSerializer.Deserialize<ApiProviderConfiguration>(configJson)!;
+    }
     private HttpResponseMessage CreateHttpResponseMessage(string content)
     {
         return new HttpResponseMessage

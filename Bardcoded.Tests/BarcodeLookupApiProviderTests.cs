@@ -6,9 +6,11 @@ using System.Text.Json;
 using Xunit;
 
 namespace Bardcoded.Tests;
-
+[Trait("unit", "ApiClient")]
 public class BarcodeLookupApiProviderTests
 {
+    public BarcodeLookupApiProviderTests(){}
+
     // Test data for parameterized tests
     public static TheoryData<string, bool> ResponseTypeData => new()
     {
@@ -47,7 +49,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesVariousResponseTypes(string jsonResponse, bool shouldReturnProduct)
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var httpResponse = CreateHttpResponseMessage(jsonResponse);
 
         // Act
@@ -70,7 +72,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_MapsProductNameCorrectly(string barcode, string title, string productName, string expectedName)
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var jsonResponse = CreateProductJson(barcode, title, productName, "TestBrand");
         var httpResponse = CreateHttpResponseMessage(jsonResponse);
 
@@ -89,7 +91,7 @@ public class BarcodeLookupApiProviderTests
         string description, string brand, string manufacturer, string category, string size, string expectedContains)
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -121,7 +123,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesErrorResponse()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var jsonResponse = @"{""error"":""404"",""message"":""Product not found""}";
         var httpResponse = CreateHttpResponseMessage(jsonResponse);
 
@@ -136,7 +138,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesEmptyProductsArray()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var jsonResponse = @"{""products"":[]}";
         var httpResponse = CreateHttpResponseMessage(jsonResponse);
 
@@ -151,7 +153,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesNullProducts()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var jsonResponse = @"{""products"":null}";
         var httpResponse = CreateHttpResponseMessage(jsonResponse);
 
@@ -166,7 +168,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_UsesFirstProductWhenMultipleReturned()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var jsonResponse = @"{
             ""products"": [
                 {""barcode_number"":""123456"",""title"":""First Product""},
@@ -188,7 +190,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_IncludesImageUrl()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -217,7 +219,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesNoImages()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -245,7 +247,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_SetsImageTypeToJpg()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -273,7 +275,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesEmptyDescriptionFields()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -305,7 +307,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_IncludesFeaturesInDescription()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -338,7 +340,7 @@ public class BarcodeLookupApiProviderTests
     public async Task GetHttpClient_ConfiguresBaseAddress()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
 
         // Act
         var client = await provider.GetHttpClient();
@@ -352,10 +354,10 @@ public class BarcodeLookupApiProviderTests
     public async Task IsOverRates_ReturnsFalse()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var config = CreateConfigFromJson();
 
         // Act
-        var result = await provider.IsOverRates();
+        var result = await config.IsOverRates();
 
         // Assert
         Assert.False(result);
@@ -365,10 +367,10 @@ public class BarcodeLookupApiProviderTests
     public async Task UpdateRates_CompletesSuccessfully()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var config = CreateConfigFromJson();
 
         // Act & Assert (should not throw)
-        await provider.UpdateRates();
+        await config.UpdateRates();
     }
 
     [Theory]
@@ -381,7 +383,7 @@ public class BarcodeLookupApiProviderTests
     public async Task IsResponseKosher_ValidatesHttpStatusCode(HttpStatusCode statusCode, bool expected)
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var response = new HttpResponseMessage(statusCode);
 
         // Act
@@ -405,10 +407,10 @@ public class BarcodeLookupApiProviderTests
     public void IsBarcodeTypeAllowed_ValidatesAllowedTypes(string barcodeType, bool expected)
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var config = CreateConfigFromJson();
 
         // Act
-        var result = provider.IsBarcodeTypeAllowed(barcodeType);
+        var result = config.IsBarcodeTypeAllowed(barcodeType);
 
         // Assert
         Assert.Equal(expected, result);
@@ -418,7 +420,7 @@ public class BarcodeLookupApiProviderTests
     public void GetPathForBarcode_ReplacesBarcodePlaceholder()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var barcode = "012345678905";
 
         // Act
@@ -454,7 +456,7 @@ public class BarcodeLookupApiProviderTests
     public void GetPathForBarcode_HandlesEmptyKey()
     {
         // Arrange
-        var provider = CreateProviderFromJson(); // Has empty key
+        var provider = CreateProviderFromJson(CreateConfigFromJson()); // Has empty key
         var barcode = "012345678905";
 
         // Act
@@ -491,7 +493,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_HandlesComplexProductWithAllFields()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -535,7 +537,7 @@ public class BarcodeLookupApiProviderTests
     public async Task Translate_PrioritizesLabelOverProductName()
     {
         // Arrange
-        var provider = CreateProviderFromJson();
+        var provider = CreateProviderFromJson(CreateConfigFromJson());
         var product = new
         {
             products = new[]
@@ -560,17 +562,17 @@ public class BarcodeLookupApiProviderTests
     }
 
     // Helper methods
-    private BarcodeLookupApiProvider CreateProviderFromJson()
+    private BarcodeLookupApiProvider CreateProviderFromJson(ApiProviderConfiguration c)
     {
-        var configJson = @"{
-            ""$type"": ""BarcodeLookupApiProvider"",
-            ""url"": ""https://api.barcodelookup.com"",
-            ""path"": ""v3/products?barcode={barcode}&key="",
-            ""key"": """",
-            ""allowedBarcodeTypes"": [ ""UPC-A"", ""UPC-E"", ""EAN-13"", ""EAN-8"", ""ISBN-10"", ""ISBN-13"" ]
-        }";
-
-        return JsonSerializer.Deserialize<BarcodeLookupApiProvider>(configJson)!;
+        return new BarcodeLookupApiProvider(c);
+    }
+    private ApiProviderConfiguration CreateConfigFromJson()
+    {
+        var configJson = "{\"$type\": \"BarcodeLookupApiProvider\",\"url\": \"https://api.barcodelookup.com\",\"path\": \"v3/products?barcode={barcode}&key=\",\"key\": \"\",\"allowedBarcodeTypes\": [ \"UPC-A\", \"UPC-E\", \"EAN-13\", \"EAN-8\", \"ISBN-10\", \"ISBN-13\" ]}";
+        var config = JsonSerializer.Deserialize<ApiProviderConfiguration>(configJson)!;
+        config.RateLimit = new RateLimit { TimeSpan = TimeSpan.FromMinutes(1), Limit = 100 };
+        config.Rate = new Rate { Count = 0, NextReset = DateTime.UtcNow.AddMinutes(1) };
+        return config;
     }
 
     private HttpResponseMessage CreateHttpResponseMessage(string content)

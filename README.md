@@ -165,44 +165,6 @@ Bardcode uses external APIs to retrieve product information from barcodes. The s
 
 #### Supported Providers
 
-The application includes three barcode data providers, each with different features, costs, and requirements:
-
-##### 1. UPC Database
-
-**Website:** https://upcdatabase.org/
-
-**Features:**
-- Supports UPC barcodes
-- Requires API key authentication
-- Provides product titles, descriptions, and images
-
-**Account Setup:**
-1. Create an account at https://upcdatabase.org/
-2. Navigate to your account settings to generate an API key
-3. Copy your API key
-
-**Rate Limits & Pricing:**
-- Free tier: 100 requests per day
-- Paid plans available with higher limits
-- See https://upcdatabase.org/api for current pricing and rate limits
-
-**License:**
-- Review the terms of service at https://upcdatabase.org/terms
-
-**Configuration:**
-
-The UPC Database provider is pre-configured in `Bardcoded.ApiService/appsettings.json` with an empty `key` field:
-
-```json
-{
-  "$type": "UpcDatabaseApiProvider",
-  "url": "https://api.upcdatabase.org",
-  "path": "product/{barcode}",
-  "key": "",
-  "allowedBarcodeTypes": [ "UPC" ]
-}
-```
-
 **Setting the API Key (Security Best Practice):**
 
 **IMPORTANT:** Never store API keys directly in configuration files as this is a security risk. Instead, set the API key using an environment variable or command-line argument.
@@ -239,6 +201,44 @@ For local development, use the .NET user secrets feature:
 ```bash
 cd Bardcoded.ApiService
 dotnet user-secrets set "Application:Integrations:0:key" "your-api-key-here"
+```
+
+The application includes three barcode data providers, each with different features, costs, and requirements:
+
+##### 1. UPC Database
+
+**Website:** https://upcdatabase.org/
+
+**Features:**
+- Supports UPC barcodes
+- Requires API key authentication
+- Provides product titles, descriptions, and images
+
+**Account Setup:**
+1. Create an account at https://upcdatabase.org/
+2. Navigate to your account settings to generate an API key
+3. Copy your API key
+
+**Rate Limits & Pricing:**
+- Free tier: 100 requests per day
+- Paid plans available with higher limits
+- See https://upcdatabase.org/api for current pricing and rate limits
+
+**License:**
+- Review the terms of service at https://upcdatabase.org/terms
+
+**Configuration:**
+
+The UPC Database provider is pre-configured in `Bardcoded.ApiService/appsettings.json` with an empty `key` field:
+
+```json
+{
+  "$type": "UpcDatabaseApiProvider",
+  "url": "https://api.upcdatabase.org",
+  "path": "product/{barcode}",
+  "key": "",
+  "allowedBarcodeTypes": [ "UPC" ]
+}
 ```
 
 ##### 2. Open Food Facts
