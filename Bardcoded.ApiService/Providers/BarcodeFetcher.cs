@@ -43,7 +43,7 @@ namespace Bardcoded.ApiService.Providers
     }
     public class BarcodeFetcher
     {
-        private readonly ApiProviderConfiguration[] configs;
+        private readonly Dictionary<ApiProviderConfiguration, ApiProvider> configs;
         private readonly MemoryCache cache;
         private readonly IFeatureManager features;
         private readonly IBarcodeDataContext database;
@@ -53,9 +53,9 @@ namespace Bardcoded.ApiService.Providers
         private bool useDb;
         private bool useApis;
 
-        public BarcodeFetcher(List<ApiProviderConfiguration> configs, MemoryCache cache, IFeatureManager features, IBarcodeDataContext database, ILoggerFactory factory)
+        public BarcodeFetcher(Dictionary<ApiProviderConfiguration, ApiProvider> configs, MemoryCache cache, IFeatureManager features, IBarcodeDataContext database, ILoggerFactory factory)
         {
-            this.configs = configs.ToArray();
+            this.configs = configs;
             this.cache = cache;
             this.features = features;
             this.database = database;
@@ -161,32 +161,40 @@ namespace Bardcoded.ApiService.Providers
         private async Task<BarcodeView?> NetworkProviders(string barcode, string barcodeType)
         {
             logger.LogInformation($"Fetching {barcode} from network providers.");
-            foreach (var provider in configs)
+            foreach (var integration in configs)
             {
-                if(!provider.IsBarcodeTypeAllowed(barcodeType))
+                var provider = integration.Value;
+                var config = integration.Key;
+                if (!config.Enabled)
                 {
-                    logger.LogInformation($"Skipping {barcode} for provider {provider.Type} due to barcode type restrictions.");
+                    logger.LogInformation($"Skipping provider {config.Type} because it is disabled.");
+                    continue;
+                }
+                if (!config.IsBarcodeTypeAllowed(barcodeType))
+                {
+                    logger.LogInformation($"Skipping provider {config.Type} due to barcode type restrictions.");
+                    continue;
+                }
+                if (await config.IsOverRates())
+                {
+                    logger.LogWarning($"Skipping {config.Type} for {barcode} due to rate limiting.");
                     continue;
                 }
                 try
                 {
-                    logger.LogTrace($"Using {provider.Type}");
+                    logger.LogTrace($"Using {config.Type}");
                     var client = await provider.GetHttpClient();
-                    if (await provider.IsOverRates())
-                    {
-                        logger.LogWarning($"Skipping {provider.Type} for {barcode} due to rate limiting.");
-                        continue;
-                    }
+                    config.Rate.Count += 1;
                     var response = await client.GetAsync(provider.GetPathForBarcode(barcode));
                     if (await provider.IsResponseKosher(response))
                     {
-                        logger.LogInformation($"Successfully fetched {barcode} from {provider.Type}.");
+                        logger.LogInformation($"Successfully fetched {barcode} from {config.Type}.");
                         return await provider.Translate(response);
                     }
                 }
                 catch (Exception e)
                 {
-                    logger.LogError($"Caught and ignoring {e.GetType()} trying to get {barcode} from {provider.Type}: {e.Message}");
+                    logger.LogError($"Caught and ignoring {e.GetType()} trying to get {barcode} from {config.Type}: {e.Message}");
                 }
             }
             return null;
