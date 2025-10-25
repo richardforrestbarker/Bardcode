@@ -63,9 +63,9 @@ namespace Bardcoded.ApiService.Providers
             this.logger = factory.CreateLogger<BarcodeFetcher>();
         }
 
-        public async Task<BarcodeView?> FindItem(string barcode, string barcodeType)
+        public async Task<BardcodeInjestRequest?> FindItem(string barcode, string barcodeType)
         {
-            BarcodeView result;
+            BardcodeInjestRequest result;
             useCache = await GetUseCache();
             useDb = await GetUseDb();
             useApis = await GetUseApis();
@@ -93,9 +93,9 @@ namespace Bardcoded.ApiService.Providers
             }
             if (useApis)
             {
-                var (view, providerType, providerJson) = await NetworkProviders(barcode, barcodeType);
-                if (view != null) StoreAndCacheIt(barcode, view, providerType, providerJson);
-                return view;
+                var ingestRequest = await NetworkProviders(barcode, barcodeType);
+                if (ingestRequest != null) StoreAndCacheIt(barcode, ingestRequest);
+                return ingestRequest;
             }
             logger.LogInformation("Fetching from Apis is turned off.");
             return null;
@@ -116,7 +116,7 @@ namespace Bardcoded.ApiService.Providers
             return features.IsEnabledAsync("UseCache");
         }
 
-        private async void CacheIt(string barcode, BarcodeView result)
+        private async void CacheIt(string barcode, BardcodeInjestRequest result)
         {
             if (!useCache) return;
             var entry = cache.CreateEntry(barcode);
@@ -125,61 +125,61 @@ namespace Bardcoded.ApiService.Providers
                 .SetSlidingExpiration(TimeSpan.FromMinutes(5));
         }
 
-        private void StoreAndCacheIt(string barcode, BarcodeView result, string? providerType, string? providerJson)
+        private void StoreAndCacheIt(string barcode, BardcodeInjestRequest result)
         {
             if (useCache) CacheIt(barcode, result);
-            if (useDb) StoreIt(barcode, new BardcodeInjestRequest()
-            {
-                Bard = result.Code,
-                Base64Image = result.ImageAsBase64,
-                Description = result.Description,
-                ImageType = result.ImageType,
-                Name = result.Name,
-                Source = "",
-                WeightVolume = "",
-            }, providerType, providerJson);
+            if (useDb) StoreIt(barcode, result);
         }
 
-        private void StoreIt(string barcode, BardcodeInjestRequest request, string? providerType, string? providerJson)
+        private void StoreIt(string barcode, BardcodeInjestRequest request)
         {
             var entity = mapper.Map(request);
             database.InsertBarcode(entity);
             
             // Store provider data if available
-            if (!string.IsNullOrEmpty(providerType) && !string.IsNullOrEmpty(providerJson))
+            if (!string.IsNullOrEmpty(request.ProviderType) && !string.IsNullOrEmpty(request.ProviderJson))
             {
                 database.InsertBarcodeDataProvided(new BarcodeDataProvided
                 {
                     Bard = barcode,
                     LastUpdated = DateTime.UtcNow,
-                    ProviderType = providerType,
-                    ProviderJson = providerJson
+                    ProviderType = request.ProviderType,
+                    ProviderJson = request.ProviderJson
                 });
             }
         }
 
-        private async Task<BarcodeView> Database(string barcode)
+        private async Task<BardcodeInjestRequest> Database(string barcode)
         {
-            IOMapper mapper = new IOMapper();
             var entity = await database.GetBarcode(barcode);
-            var view = mapper.Map(entity);
+            var request = new BardcodeInjestRequest
+            {
+                Bard = entity.Bard,
+                Name = entity.Name,
+                Description = entity.Description,
+                Base64Image = entity.Base64Image,
+                ImageType = entity.ImageType,
+                Source = entity.Source,
+                WeightVolume = ""
+            };
             
             // Get provider information if available
             var providerData = await database.GetBarcodeDataProvided(barcode);
             if (providerData != null)
             {
-                view.ProviderType = providerData.ProviderType;
+                request.ProviderType = providerData.ProviderType;
+                request.ProviderJson = providerData.ProviderJson;
             }
             
-            return view;
+            return request;
         }
 
-        private Task<BarcodeView> Cache(string barcode)
+        private Task<BardcodeInjestRequest> Cache(string barcode)
         {
-            return Task.FromResult(cache.Get<BarcodeView>(barcode));
+            return Task.FromResult(cache.Get<BardcodeInjestRequest>(barcode));
         }
 
-        private async Task<(BarcodeView?, string?, string?)> NetworkProviders(string barcode, string barcodeType)
+        private async Task<BardcodeInjestRequest?> NetworkProviders(string barcode, string barcodeType)
         {
             logger.LogInformation($"Fetching {barcode} from network providers.");
             foreach (var integration in configs)
@@ -210,14 +210,24 @@ namespace Bardcoded.ApiService.Providers
                     if (await provider.IsResponseKosher(response))
                     {
                         logger.LogInformation($"Successfully fetched {barcode} from {config.Type}.");
+                        // Capture the full JSON response first
+                        var jsonResponse = await response.Content.ReadAsStringAsync();
                         var result = await provider.Translate(response);
                         if (result != null)
                         {
-                            // Set the provider type on the result
-                            result.ProviderType = config.Type;
-                            // Capture the full JSON response
-                            var jsonResponse = await response.Content.ReadAsStringAsync();
-                            return (result, config.Type, jsonResponse);
+                            // Create the ingest request with all the data
+                            return new BardcodeInjestRequest
+                            {
+                                Bard = result.Code,
+                                Name = result.Name,
+                                Description = result.Description,
+                                Base64Image = result.ImageAsBase64 ?? "",
+                                ImageType = result.ImageType ?? "",
+                                Source = "API",
+                                WeightVolume = "",
+                                ProviderType = config.Type,
+                                ProviderJson = jsonResponse
+                            };
                         }
                     }
                 }
@@ -226,7 +236,7 @@ namespace Bardcoded.ApiService.Providers
                     logger.LogError($"Caught and ignoring {e.GetType()} trying to get {barcode} from {config.Type}: {e.Message}");
                 }
             }
-            return (null, null, null);
+            return null;
         }
 
         private async Task<bool> Databased(string barcode)

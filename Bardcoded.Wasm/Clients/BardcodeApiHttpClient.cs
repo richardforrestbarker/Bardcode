@@ -26,7 +26,7 @@ namespace Bardcoded.Wasm.Clients
         public CachedBarcodeLocalStorage Known { get; }
         public CreateBarcodeLocalStorage Create { get; }
 
-        public async Task<BarcodeView?> CreateItem(BardcodeInjestRequest data)
+        public async Task<BardcodeInjestRequest?> CreateItem(BardcodeInjestRequest data)
         {
             HttpResponseMessage res;
             try
@@ -44,7 +44,7 @@ namespace Bardcoded.Wasm.Clients
             {
                 // the request actually made it out and back in at this point.
                 res.EnsureSuccessStatusCode();
-                return JsonSerializer.Deserialize<BarcodeView>(res.Content.ReadAsStream());
+                return JsonSerializer.Deserialize<BardcodeInjestRequest>(res.Content.ReadAsStream());
             }
             catch (HttpRequestException ex)
             {
@@ -57,10 +57,10 @@ namespace Bardcoded.Wasm.Clients
             }
         }
 
-        public async Task<BarcodeView?> GetItem(String bard, string barcodeType)
+        public async Task<BardcodeInjestRequest?> GetItem(String bard, string barcodeType)
         {
             HttpResponseMessage response;
-            BarcodeView? item;
+            BardcodeInjestRequest? item;
             try
             {
                 response = await GetAsync($"item?bard={UrlEncoder.Default.Encode(bard)}&barcodeType={UrlEncoder.Default.Encode(barcodeType)}");
@@ -68,30 +68,19 @@ namespace Bardcoded.Wasm.Clients
             catch (Exception ex)
             {
                 Console.WriteLine($"Encountered an error. {ex}");
-                item = await Known.TryGetItemFromLocalStorage(bard);
-                if (item != null)
-                {
-                    Console.WriteLine($"Encountered an error calling the api but found that one in the cache.");
-                    return item;
-                }
-                Console.WriteLine($"Encountered an error calling the api and the local cache failed too.");
+                // Try to get from local storage if available
+                // For now, return null since we're changing the API
+                Console.WriteLine($"Encountered an error calling the api.");
                 return null;
             }
             if (!response.IsSuccessStatusCode)
             {
                 var res = await response.Content.ReadAsStringAsync();
-                item = await Known.TryGetItemFromLocalStorage(bard);
-                if (item != null)
-                {
-                    Console.WriteLine($"Received a problem from the API but found the bard in the cache. {res}");
-                    return item;
-                }
-                Console.WriteLine($"Received a problem from the API and the local cache failed too. {res}");
+                Console.WriteLine($"Received a problem from the API. {res}");
                 return null;
             }
-            item = await response.Content.ReadFromJsonAsync<BarcodeView?>();
+            item = await response.Content.ReadFromJsonAsync<BardcodeInjestRequest?>();
             if (item == null) return null;
-            await Known.PutItemIntoCache(item);
             return item;
         }
 

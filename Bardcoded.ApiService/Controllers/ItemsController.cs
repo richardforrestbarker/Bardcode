@@ -60,9 +60,9 @@ namespace Bardcoded.ApiService.Controllers
         /// <response code="400">If the bard is null or empty string.</response>
         /// <response code="404">If the bard is not found.</response>
         [HttpGet()]
-        [ProducesResponseType(typeof(BarcodeView), 200)]
-        [ProducesResponseType(typeof(BarcodeView), 400)]
-        [ProducesResponseType(typeof(BarcodeView), 404)]
+        [ProducesResponseType(typeof(BardcodeInjestRequest), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
         public async Task<IResult> Get([FromQuery] string bard, [FromQuery] string barcodeType)
         {
             if (String.IsNullOrWhiteSpace(bard))
@@ -80,13 +80,13 @@ namespace Bardcoded.ApiService.Controllers
         /// <summary>
         /// Creates an item by it's barcode. If that item is known already then returns a 409. If the barcode fails validation, returns a 400.
         /// </summary>
-        /// <param name="bard">The code of the item to get.</param>
+        /// <param name="request">The barcode ingest request</param>
         /// <returns>The item and an image.</returns>
         /// <response code="201">The item.</response>
         /// <response code="400">If the bard is null or empty string.</response>
         /// <response code="409">If the bard exists.</response>
         [HttpPost]
-        [ProducesResponseType(typeof(BarcodeView), 201)]
+        [ProducesResponseType(typeof(BardcodeInjestRequest), 201)]
         [ProducesResponseType(typeof(ProblemDetails), 400)]
         [ProducesResponseType(typeof(ProblemDetails), 409)]
         public async Task<IResult> Post([FromBody] BardcodeInjestRequest request)
@@ -96,8 +96,21 @@ namespace Bardcoded.ApiService.Controllers
                 var mapper = new IOMapper();
                 var create = mapper.Map(request);
                 var id = await Context.InsertBarcode(create);
+                
+                // Store provider data if available
+                if (!string.IsNullOrEmpty(request.ProviderType) && !string.IsNullOrEmpty(request.ProviderJson))
+                {
+                    Context.InsertBarcodeDataProvided(new Data.Store.BarcodeDataProvided
+                    {
+                        Bard = request.Bard,
+                        LastUpdated = DateTime.UtcNow,
+                        ProviderType = request.ProviderType,
+                        ProviderJson = request.ProviderJson
+                    });
+                }
+                
                 Console.WriteLine($"barcode {id}:{create.Bard} was created");
-                return Results.Created($"/item?bard={create.Bard}", mapper.Map(create));
+                return Results.Created($"/item?bard={create.Bard}", request);
                 
             }
             catch (InvalidOperationException inval)

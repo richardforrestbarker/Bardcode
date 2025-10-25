@@ -62,6 +62,14 @@ namespace Bardcoded.Data.Messages
         [JsonPropertyName("weightVolume")]
         public string WeightVolume { get; set; }
 
+        [Description("The provider that returned this data.")]
+        [JsonPropertyName("providerType")]
+        public string? ProviderType { get; set; }
+
+        [Description("The full JSON response from the provider.")]
+        [JsonPropertyName("providerJson")]
+        public string? ProviderJson { get; set; }
+
     }
 
 
