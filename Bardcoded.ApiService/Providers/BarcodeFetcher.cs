@@ -177,7 +177,7 @@ namespace Bardcoded.ApiService.Providers
                         logger.LogWarning($"Skipping {provider.Type} for {barcode} due to rate limiting.");
                         continue;
                     }
-                    var response = await client.GetAsync(provider.Path.Replace("{barcode}", barcode));
+                    var response = await client.GetAsync(provider.GetPathForBarcode(barcode));
                     if (await provider.IsResponseKosher(response))
                     {
                         logger.LogInformation($"Successfully fetched {barcode} from {provider.Type}.");
