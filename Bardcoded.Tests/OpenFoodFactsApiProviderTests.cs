@@ -9,7 +9,6 @@ namespace Bardcoded.Tests;
 [Trait("unit", "ApiClient")]
 public class OpenFoodFactsApiProviderTests
 {
-    public OpenFoodFactsApiProviderTests() { }
     // Test data for parameterized tests
     public static TheoryData<string, bool> ResponseStatusData => new()
     {
