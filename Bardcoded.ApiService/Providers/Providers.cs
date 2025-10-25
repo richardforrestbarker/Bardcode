@@ -15,6 +15,7 @@ namespace Bardcoded.ApiService.Providers;
 
 [JsonDerivedType(typeof(UpcDatabaseApiProvider), nameof(UpcDatabaseApiProvider))]
 [JsonDerivedType(typeof(OpenFoodFactsApiProvider), nameof(OpenFoodFactsApiProvider))]
+[JsonDerivedType(typeof(BarcodeLookupApiProvider), nameof(BarcodeLookupApiProvider))]
 [JsonDerivedType(typeof(ApiProviderConfiguration))]
 public class ApiProviderConfiguration
 {
@@ -52,6 +53,11 @@ public class ApiProviderConfiguration
     public bool IsBarcodeTypeAllowed(string barcodeType)
     {
         return AllowedBarcodeTypes?.Contains(barcodeType) ?? false;
+    }
+
+    public virtual string GetPathForBarcode(string barcode)
+    {
+        return Path.Replace("{barcode}", barcode);
     }
 }
 public class UpcDatabaseApiProvider : ApiProviderConfiguration
@@ -169,6 +175,124 @@ public class OpenFoodFactsApiProvider : ApiProviderConfiguration
         client.BaseAddress = new Uri(Url);
         client.DefaultRequestHeaders.Add("User-Agent", "Bardcode/1.0 (Barcode Scanner Application)");
         return Task.FromResult(client);
+    }
+}
+
+public class BarcodeLookupApiProvider : ApiProviderConfiguration
+{
+    private const int MaxFeaturesToInclude = 3;
+
+    public override async Task<BarcodeView> Translate(HttpResponseMessage res)
+    {
+        var body = res.Content;
+        var contentString = await body.ReadAsStringAsync();
+        
+        // Try to deserialize as product response first
+        BarcodeLookupProductResponse? productResponse = null;
+        BarcodeLookupErrorResponse? errorResponse = null;
+        
+        try
+        {
+            productResponse = JsonSerializer.Deserialize<BarcodeLookupProductResponse>(contentString);
+        }
+        catch (JsonException jsonEx)
+        {
+            Console.WriteLine($"{nameof(BarcodeLookupApiProvider)}: Failed to deserialize product response: {jsonEx.Message}");
+            // Try error response
+            try
+            {
+                errorResponse = JsonSerializer.Deserialize<BarcodeLookupErrorResponse>(contentString);
+            }
+            catch (JsonException errorEx)
+            {
+                Console.WriteLine($"{nameof(BarcodeLookupApiProvider)}: Failed to deserialize error response: {errorEx.Message}");
+            }
+        }
+
+        if (productResponse?.Products != null && productResponse.Products.Length > 0)
+        {
+            var product = productResponse.Products[0]; // Take the first product
+            
+            // Prioritize title, then label, then product_name
+            var name = !string.IsNullOrEmpty(product.Title) ? product.Title :
+                       !string.IsNullOrEmpty(product.Label) ? product.Label :
+                       !string.IsNullOrEmpty(product.ProductName) ? product.ProductName :
+                       "Unknown Product";
+            
+            var description = BuildDescription(product);
+            var imageUrl = product.Images?.FirstOrDefault();
+
+            return BarcodeView.Create(
+                product.BarcodeNumber ?? string.Empty,
+                name,
+                description,
+                imageUrl != null ? UrlEncoder.Default.Encode(imageUrl) : null,
+                "jpg"
+            );
+        }
+        else if (errorResponse != null)
+        {
+            Console.WriteLine($"{nameof(BarcodeLookupApiProvider)}: Request failed - {errorResponse.Error}: {errorResponse.Message}");
+        }
+        else
+        {
+            Console.WriteLine($"{nameof(BarcodeLookupApiProvider)}: Product not found or invalid response");
+        }
+
+        return null;
+    }
+
+    private string BuildDescription(BarcodeLookupProduct product)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrEmpty(product.Description))
+            parts.Add(product.Description);
+
+        if (!string.IsNullOrEmpty(product.Brand))
+            parts.Add($"Brand: {product.Brand}");
+
+        if (!string.IsNullOrEmpty(product.Manufacturer))
+            parts.Add($"Manufacturer: {product.Manufacturer}");
+
+        if (!string.IsNullOrEmpty(product.Category))
+            parts.Add($"Category: {product.Category}");
+
+        if (!string.IsNullOrEmpty(product.Size))
+            parts.Add($"Size: {product.Size}");
+
+        if (product.Features != null && product.Features.Length > 0)
+            parts.Add($"Features: {string.Join(", ", product.Features.Take(MaxFeaturesToInclude))}");
+
+        return parts.Count > 0 ? string.Join(". ", parts) : "No description available";
+    }
+
+    public override Task UpdateRates()
+    {
+        return Task.CompletedTask;
+    }
+
+    public override Task<bool> IsOverRates()
+    {
+        return Task.FromResult(false);
+    }
+
+    public override Task<HttpClient> GetHttpClient()
+    {
+        var client = new HttpClient();
+        client.BaseAddress = new Uri(Url);
+        return Task.FromResult(client);
+    }
+
+    public override string GetPathForBarcode(string barcode)
+    {
+        var path = Path.Replace("{barcode}", barcode);
+        // Append the API key if it's set
+        if (!string.IsNullOrEmpty(Key))
+        {
+            path += Key;
+        }
+        return path;
     }
 }
 
