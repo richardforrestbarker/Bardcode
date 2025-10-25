@@ -170,21 +170,18 @@ namespace Bardcoded.ApiService.Providers
                 }
                 try
                 {
-                    if (provider.Type.Equals(nameof(UpcDatabaseApiProvider)))
+                    logger.LogTrace($"Using {provider.Type}");
+                    var client = await provider.GetHttpClient();
+                    if (await provider.IsOverRates())
                     {
-                        logger.LogTrace("Using UpcDatabaseApiProvider");
-                        var client = await provider.GetHttpClient();
-                        if (await provider.IsOverRates())
-                        {
-                            logger.LogWarning($"Skipping {provider.Type} for {barcode} due to rate limiting.");
-                            continue;
-                        }
-                        var response = await client.GetAsync(provider.Path.Replace("{barcode}", barcode));
-                        if (await provider.IsResponseKosher(response))
-                        {
-                            logger.LogInformation($"Successfully fetched {barcode} from {provider.Type}.");
-                            return await provider.Translate(response);
-                        }
+                        logger.LogWarning($"Skipping {provider.Type} for {barcode} due to rate limiting.");
+                        continue;
+                    }
+                    var response = await client.GetAsync(provider.Path.Replace("{barcode}", barcode));
+                    if (await provider.IsResponseKosher(response))
+                    {
+                        logger.LogInformation($"Successfully fetched {barcode} from {provider.Type}.");
+                        return await provider.Translate(response);
                     }
                 }
                 catch (Exception e)
