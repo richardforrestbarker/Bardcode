@@ -36,7 +36,19 @@ namespace Bardcoded.ApiService.Controllers
         public async Task<IResult> GetAllItems()
         {
             var results = await Context.GetAll();
-            return Results.Ok(results.Select(Mapper.Map).ToList());
+            var views = new List<BarcodeView>();
+            foreach (var barcode in results)
+            {
+                var view = Mapper.Map(barcode);
+                // Get provider information if available
+                var providerData = await Context.GetBarcodeDataProvided(barcode.Bard);
+                if (providerData != null)
+                {
+                    view.ProviderType = providerData.ProviderType;
+                }
+                views.Add(view);
+            }
+            return Results.Ok(views);
         }
 
         /// <summary>
