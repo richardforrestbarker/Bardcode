@@ -15,15 +15,30 @@ namespace Bardcoded.ApiService.Data
         Task<Guid> InsertBarcode(BarcodeData data);
 
         Task<BarcodeData> UpdateBarcode(BarcodeData data);
+
+        Task<BarcodeDataProvided?> GetBarcodeDataProvided(string bard);
+        void InsertBarcodeDataProvided(BarcodeDataProvided data);
     }
     public class BarcodeDataContext(DbContextOptions<BarcodeDataContext> options) : DbContext(options), IBarcodeDataContext
     {
         public DbSet<BarcodeData> Barcodes { get; set; }
         public DbSet<BarcodeUpdate> BarcodeUpdates { get; set; }
+        public DbSet<BarcodeDataProvided> BarcodeDataProvided { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+            
+            // Configure BarcodeDataProvided to use Bard as primary key and foreign key
+            builder.Entity<BarcodeDataProvided>()
+                .HasKey(b => b.Bard);
+            
+            builder.Entity<BarcodeDataProvided>()
+                .HasOne<BarcodeData>()
+                .WithOne()
+                .HasForeignKey<BarcodeDataProvided>(b => b.Bard)
+                .HasPrincipalKey<BarcodeData>(b => b.Bard)
+                .OnDelete(DeleteBehavior.Cascade);
         }
 
         public Task DeleteAll()
@@ -92,6 +107,24 @@ namespace Bardcoded.ApiService.Data
             catch (InvalidOperationException inval)
             {
                 throw new InvalidOperationException("Can't update the entry for that barcode.", inval);
+            }
+        }
+
+        public Task<BarcodeDataProvided?> GetBarcodeDataProvided(string bard)
+        {
+            return BarcodeDataProvided.Where(c => c.Bard.Equals(bard)).SingleOrDefaultAsync();
+        }
+
+        public void InsertBarcodeDataProvided(BarcodeDataProvided data)
+        {
+            try
+            {
+                BarcodeDataProvided.Add(data);
+                SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Can't create provider data entry for that barcode.", ex);
             }
         }
     }
