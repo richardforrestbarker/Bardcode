@@ -65,12 +65,20 @@ The Playwright tests cover the following authentication and authorization flows:
 
 ## Configuration
 
-Update the base URLs in the test files to match your environment:
+The tests can be configured using environment variables:
 
-```csharp
-private const string BaseUrl = "http://localhost:5000"; // Frontend URL
-private const string ApiBaseUrl = "http://localhost:5001"; // API URL
+- `BASE_URL`: The base URL for the frontend (default: `http://localhost:5000`)
+- `API_BASE_URL`: The base URL for the API service (default: `http://localhost:5001`)
+
+Example:
+
+```bash
+export BASE_URL="https://your-frontend-url"
+export API_BASE_URL="https://your-api-url"
+dotnet test Bardcoded.PlaywrightTests
 ```
+
+Or update the default values in the test files if needed.
 
 ## Test Structure
 

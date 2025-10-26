@@ -8,8 +8,8 @@ namespace Bardcoded.PlaywrightTests;
 [TestFixture]
 public class AuthenticationTests : PageTest
 {
-    private const string BaseUrl = "http://localhost:5000"; // Update with actual URL
-    private const string ApiBaseUrl = "http://localhost:5001"; // Update with actual API URL
+    private static string BaseUrl => Environment.GetEnvironmentVariable("BASE_URL") ?? "http://localhost:5000";
+    private static string ApiBaseUrl => Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5001";
 
     [Test]
     public async Task CanLoginWithValidCredentials()
@@ -57,7 +57,7 @@ public class AuthenticationTests : PageTest
         // Arrange
         var registerData = new
         {
-            email = $"testuser{DateTime.Now.Ticks}@bardcode.local",
+            email = $"testuser{Guid.NewGuid()}@bardcode.local",
             password = "TestUser@123456"
         };
 
@@ -77,7 +77,7 @@ public class AuthenticationTests : PageTest
         // Arrange
         var registerData = new
         {
-            email = $"testuser{DateTime.Now.Ticks}@bardcode.local",
+            email = $"testuser{Guid.NewGuid()}@bardcode.local",
             password = "weak"
         };
 
@@ -145,7 +145,7 @@ public class AuthenticationTests : PageTest
 [TestFixture]
 public class ProfileManagementTests : PageTest
 {
-    private const string ApiBaseUrl = "http://localhost:5001";
+    private static string ApiBaseUrl => Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5001";
 
     private async Task<string> LoginAndGetAccessToken(string email, string password)
     {
@@ -200,7 +200,7 @@ public class ProfileManagementTests : PageTest
 [TestFixture]
 public class AccountDeletionTests : PageTest
 {
-    private const string ApiBaseUrl = "http://localhost:5001";
+    private static string ApiBaseUrl => Environment.GetEnvironmentVariable("API_BASE_URL") ?? "http://localhost:5001";
 
     [Test]
     public async Task AdminCanDeleteUserAccount()
@@ -208,7 +208,7 @@ public class AccountDeletionTests : PageTest
         // Arrange - Create a test user
         var registerData = new
         {
-            email = $"deletetest{DateTime.Now.Ticks}@bardcode.local",
+            email = $"deletetest{Guid.NewGuid()}@bardcode.local",
             password = "DeleteTest@123456"
         };
 
