@@ -51,10 +51,10 @@ Blazor WebAssembly progressive web application frontend.
 - **Program.cs** - WASM application entry point
 
 #### **Bardcoded.Data**
-Shared data transfer objects (DTOs) and data models used across projects.
+Shared Views and data models used across projects.
 - **Api/** - API provider configuration models
-- **Messages/** - Data transfer objects for API communication
-  - `BarcodeView.cs` - DTO for barcode product information
+- **Messages/** - View models for API communication
+  - `BarcodeView.cs` - View model for barcode product information
   - `BarcodeMetadata.cs` - Metadata models for barcode data
 - **Exceptions/** - Custom exception types
 - **BardcodedApiConfiguration.cs** - API configuration models
@@ -256,8 +256,47 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 #### **RESTful Design**
 - Use appropriate HTTP verbs (GET, POST, PUT, DELETE)
 - Return proper HTTP status codes
-- Use DTOs for request/response bodies
+- Use Views for request/response bodies
 - Implement proper error handling with `ProblemDetails`
+
+#### **View and Translator Pattern**
+- **Views** are data containers for transferring information (e.g., `BarcodeView`)
+- **Translators** are methods that convert from one type to another (e.g., `Translate` method in `ApiProvider`)
+- **Decouple translation logic** from the data objects themselves
+- This separation makes code easier to maintain and change
+- Allows enforcement of access restrictions more easily
+
+**Example:**
+```csharp
+// View - simple data container
+public class BarcodeView
+{
+    public string Code { get; set; }
+    public string Name { get; set; }
+    // ... other properties
+    
+    public static BarcodeView Create(string code, string name, string description, ...)
+    {
+        return new BarcodeView() { Code = code, Name = name, ... };
+    }
+}
+
+// Translator - decoupled conversion logic
+public abstract class ApiProvider
+{
+    public abstract Task<BarcodeView> Translate(HttpResponseMessage res);
+}
+
+public class OpenFoodFactsApiProvider : ApiProvider
+{
+    public override async Task<BarcodeView> Translate(HttpResponseMessage res)
+    {
+        var data = await res.Content.ReadFromJsonAsync<OpenFoodFactsResponse>();
+        // Translation logic specific to this provider
+        return BarcodeView.Create(data.Code, data.Product.Name, ...);
+    }
+}
+```
 
 #### **Configuration**
 - Store configuration in `appsettings.json`
