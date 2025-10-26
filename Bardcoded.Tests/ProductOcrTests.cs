@@ -11,94 +11,73 @@ namespace Bardcoded.Tests
             // BUnit will provide stub implementations for services by default
         }
 
-        [Fact]
-        public void ProductOcr_RendersCorrectly()
+        [Theory]
+        [InlineData("123456789012")]
+        [InlineData("0987654321098")]
+        public void ProductOcr_RendersCorrectly(string barcode)
         {
             // Arrange & Act
-            var component = RenderComponent<Product>();
+            var component = RenderComponent<Product>(parameters => parameters.Add(p => p.Barcode, barcode));
 
             // Assert
             Assert.NotNull(component);
             var markup = component.Markup;
             Assert.Contains("Product OCR", markup);
             Assert.Contains("Upload Product Images", markup);
+            Assert.Contains(barcode, markup);
         }
 
-        [Fact]
-        public void ProductOcr_HasBarcodeInput()
+        [Theory]
+        [InlineData("123456789012")]
+        [InlineData("0987654321098")]
+        public void ProductOcr_DisplaysBarcodeParameter(string barcode)
         {
             // Arrange & Act
-            var component = RenderComponent<Product>();
+            var component = RenderComponent<Product>(parameters => parameters.Add(p => p.Barcode, barcode));
 
             // Assert
-            var barcodeInput = component.Find("#barcodeInput");
+            var barcodeInput = component.Find("input[readonly]");
             Assert.NotNull(barcodeInput);
+            Assert.Equal(barcode, barcodeInput.GetAttribute("value"));
         }
 
-        [Fact]
-        public void ProductOcr_HasImageUploadInput()
+        [Theory]
+        [InlineData("#imageUpload", "image/*")]
+        public void ProductOcr_HasImageUploadInput(string elementId, string acceptAttribute)
         {
             // Arrange & Act
-            var component = RenderComponent<Product>();
+            var component = RenderComponent<Product>(parameters => parameters.Add(p => p.Barcode, "123456789012"));
 
             // Assert
-            var imageUpload = component.Find("#imageUpload");
+            var imageUpload = component.Find(elementId);
             Assert.NotNull(imageUpload);
-            Assert.Equal("image/*", imageUpload.GetAttribute("accept"));
+            Assert.Equal(acceptAttribute, imageUpload.GetAttribute("accept"));
         }
 
-        [Fact]
-        public void ProductOcr_DisplaysErrorMessage_WhenBarcodeNotProvided()
+        [Theory]
+        [InlineData("Product OCR")]
+        [InlineData("Upload Product Images")]
+        public void ProductOcr_ContainsExpectedText(string expectedText)
         {
-            // Arrange
-            var component = RenderComponent<Product>();
-
-            // Act - Simulate image upload without barcode
-            // This would require more complex setup with InputFile simulation
-            // For now, we verify the structure is in place
+            // Arrange & Act
+            var component = RenderComponent<Product>(parameters => parameters.Add(p => p.Barcode, "123456789012"));
 
             // Assert
             var markup = component.Markup;
-            Assert.Contains("Enter barcode", markup);
+            Assert.Contains(expectedText, markup);
         }
 
-        [Fact]
-        public void ProductOcr_HasProductFormFields()
+        [Theory]
+        [InlineData("Extracted Text")]
+        [InlineData("Uploaded Images")]
+        public void ProductOcr_InitializesWithEmptyState(string notExpectedText)
         {
             // Arrange & Act
-            var component = RenderComponent<Product>();
-            
-            // First we need to trigger image upload to show the form
-            // For basic test, just verify the page structure exists
-            var markup = component.Markup;
-
-            // Assert - The form fields exist in markup even if hidden initially
-            Assert.Contains("Product OCR", markup);
-        }
-
-        [Fact]
-        public void ProductOcr_InitializesWithEmptyState()
-        {
-            // Arrange & Act
-            var component = RenderComponent<Product>();
+            var component = RenderComponent<Product>(parameters => parameters.Add(p => p.Barcode, "123456789012"));
 
             // Assert
             var markup = component.Markup;
-            // Should not show OCR results or uploaded images initially
-            Assert.DoesNotContain("Extracted Text", markup);
-            Assert.DoesNotContain("Uploaded Images", markup);
-        }
-
-        [Fact]
-        public void ProductOcr_HasSaveButton()
-        {
-            // Arrange & Act
-            var component = RenderComponent<Product>();
-            var markup = component.Markup;
-
-            // Assert - Save button exists in the markup (even if section is hidden)
-            // The button won't be visible until images are processed
-            Assert.Contains("Product OCR", markup);
+            Assert.DoesNotContain(notExpectedText, markup);
         }
     }
 }

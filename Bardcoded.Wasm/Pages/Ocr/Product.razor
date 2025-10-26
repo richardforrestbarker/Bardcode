@@ -1,4 +1,4 @@
-@page "/ocr/product"
+@page "/ocr/product/{Barcode}"
 @using Bardcoded.Data.Messages
 @using Bardcoded.Wasm.Clients
 
@@ -29,8 +29,8 @@
         </div>
         <div class="card-body">
             <div class="mb-3">
-                <label for="barcodeInput" class="form-label">Barcode</label>
-                <input type="text" class="form-control" id="barcodeInput" @bind="Barcode" placeholder="Enter barcode" />
+                <label class="form-label">Barcode</label>
+                <input type="text" class="form-control" value="@Barcode" readonly />
             </div>
             
             <div class="mb-3">
@@ -60,8 +60,8 @@
                     @foreach (var img in UploadedImages)
                     {
                         <div class="col-md-4 mb-3">
-                            <div class="position-relative">
-                                <img src="@img.DataUrl" class="img-fluid" alt="Product image" />
+                            <div class="position-relative" style="width: 600px; height: 400px;">
+                                <img src="@img.DataUrl" class="img-fluid" alt="Product image" style="width: 600px; height: 400px; object-fit: contain;" />
                                 <canvas id="@img.CanvasId" class="position-absolute top-0 start-0" style="pointer-events: none;"></canvas>
                             </div>
                             @if (!string.IsNullOrEmpty(img.DetectedBarcode))
@@ -137,7 +137,7 @@
     [Inject] public IJSRuntime JSRuntime { get; set; } = default!;
     [Inject] public BardcodeApiHttpClient ApiClient { get; set; } = default!;
 
-    private string Barcode { get; set; } = string.Empty;
+    [Parameter] public string Barcode { get; set; } = string.Empty;
     private string ErrorMessage { get; set; } = string.Empty;
     private string SuccessMessage { get; set; } = string.Empty;
     private bool IsProcessing { get; set; } = false;
