@@ -1,0 +1,250 @@
+@page "/account/manage"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Manage Account</PageTitle>
+
+<AuthorizeView Context="authContext">
+    <Authorized>
+        <div class="container mt-5">
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <h2 class="mb-4">Manage Your Account</h2>
+
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @successMessage
+                            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @errorMessage
+                            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                        </div>
+                    }
+
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title">Profile Information</h5>
+                            <p class="text-muted">Update your account profile information.</p>
+                            
+                            <EditForm Model="@profileModel" OnValidSubmit="HandleUpdateProfile">
+                                <DataAnnotationsValidator />
+                                
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email</label>
+                                    <InputText id="email" class="form-control" @bind-Value="profileModel.Email" disabled />
+                                    <small class="form-text text-muted">Email cannot be changed at this time.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="tagline" class="form-label">Tagline</label>
+                                    <InputText id="tagline" class="form-control" @bind-Value="profileModel.Tagline" placeholder="Your personal tagline" />
+                                    <small class="form-text text-muted">A personal phrase to verify you're on the correct site.</small>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary" disabled="@isUpdatingProfile">
+                                    @if (isUpdatingProfile)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    }
+                                    Update Profile
+                                </button>
+                            </EditForm>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title">Change Password</h5>
+                            <p class="text-muted">Update your password to keep your account secure.</p>
+                            
+                            <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword">
+                                <DataAnnotationsValidator />
+                                <ValidationSummary class="text-danger" />
+
+                                <div class="mb-3">
+                                    <label for="oldPassword" class="form-label">Current Password</label>
+                                    <InputText id="oldPassword" type="password" class="form-control" @bind-Value="passwordModel.OldPassword" />
+                                    <ValidationMessage For="@(() => passwordModel.OldPassword)" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="newPassword" class="form-label">New Password</label>
+                                    <InputText id="newPassword" type="password" class="form-control" @bind-Value="passwordModel.NewPassword" />
+                                    <ValidationMessage For="@(() => passwordModel.NewPassword)" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                                    <InputText id="confirmPassword" type="password" class="form-control" @bind-Value="passwordModel.ConfirmPassword" />
+                                    <ValidationMessage For="@(() => passwordModel.ConfirmPassword)" />
+                                </div>
+
+                                <button type="submit" class="btn btn-warning" disabled="@isChangingPassword">
+                                    @if (isChangingPassword)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    }
+                                    Change Password
+                                </button>
+                            </EditForm>
+                        </div>
+                    </div>
+
+                    <div class="card border-danger">
+                        <div class="card-body">
+                            <h5 class="card-title text-danger">Danger Zone</h5>
+                            <p class="text-muted">Delete your account and all associated data.</p>
+                            <button class="btn btn-danger" @onclick="() => showDeleteConfirmation = true">
+                                Delete Account
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (showDeleteConfirmation)
+        {
+            <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Confirm Account Deletion</h5>
+                            <button type="button" class="btn-close" @onclick="() => showDeleteConfirmation = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-danger fw-bold">Warning: This action cannot be undone!</p>
+                            <p>Are you sure you want to delete your account? All your data will be permanently removed.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="() => showDeleteConfirmation = false">Cancel</button>
+                            <button type="button" class="btn btn-danger" @onclick="HandleDeleteAccount">Delete My Account</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <div class="container mt-5">
+            <div class="alert alert-warning">
+                <p>You must be logged in to manage your account.</p>
+                <a href="/account/login" class="btn btn-primary">Log In</a>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private ProfileModel profileModel = new();
+    private PasswordModel passwordModel = new();
+    private string? successMessage;
+    private string? errorMessage;
+    private bool isUpdatingProfile = false;
+    private bool isChangingPassword = false;
+    private bool showDeleteConfirmation = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // In a real implementation, you would fetch the current user's profile
+        // For now, we'll use placeholder data
+        profileModel.Email = "user@example.com";
+        profileModel.Tagline = "";
+    }
+
+    private async Task HandleUpdateProfile()
+    {
+        isUpdatingProfile = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            // Call the API to update profile
+            // For now, just show success
+            await Task.Delay(500);
+            successMessage = "Profile updated successfully!";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to update profile: {ex.Message}";
+        }
+        finally
+        {
+            isUpdatingProfile = false;
+        }
+    }
+
+    private async Task HandleChangePassword()
+    {
+        isChangingPassword = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            if (passwordModel.NewPassword != passwordModel.ConfirmPassword)
+            {
+                errorMessage = "New passwords do not match.";
+                return;
+            }
+
+            // Call the API to change password
+            await Task.Delay(500);
+            successMessage = "Password changed successfully!";
+            passwordModel = new PasswordModel();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to change password: {ex.Message}";
+        }
+        finally
+        {
+            isChangingPassword = false;
+        }
+    }
+
+    private async Task HandleDeleteAccount()
+    {
+        try
+        {
+            // Call the API to delete account
+            await Task.Delay(500);
+            Navigation.NavigateTo("/account/logout", true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete account: {ex.Message}";
+            showDeleteConfirmation = false;
+        }
+    }
+
+    public class ProfileModel
+    {
+        public string Email { get; set; } = "";
+        public string? Tagline { get; set; }
+    }
+
+    public class PasswordModel
+    {
+        [Required]
+        [DataType(DataType.Password)]
+        public string OldPassword { get; set; } = "";
+
+        [Required]
+        [StringLength(100, MinimumLength = 8)]
+        [DataType(DataType.Password)]
+        public string NewPassword { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        [Compare(nameof(NewPassword))]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}
