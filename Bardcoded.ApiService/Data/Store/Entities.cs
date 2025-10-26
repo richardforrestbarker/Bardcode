@@ -26,4 +26,18 @@
         public String ProviderJson { get; set; }
         public String ProviderType { get; set; }
     }
+
+    public class InventoryItem
+    {
+        public Guid Id { get; set; }
+        public Guid? ProductId { get; set; }
+        public String Barcode { get; set; }
+        public String BarcodeType { get; set; }
+        public int Quantity { get; set; }
+        public int ReservedQuantity { get; set; }
+        public String? Location { get; set; }
+        public DateTimeOffset LastUpdatedAt { get; set; }
+        public String LastUpdatedBy { get; set; }
+        public byte[]? RowVersion { get; set; }
+    }
 }
