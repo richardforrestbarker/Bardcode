@@ -5,6 +5,12 @@ Bardcode is a home supply management system that helps you track and manage hous
 ## Features
 
 - **Barcode Scanning**: Scan product barcodes using your device's camera
+- **Product OCR**: Extract product information from images using Optical Character Recognition (OCR)
+  - Upload product images (front, back, etc.)
+  - Automatically extract text from product labels using Tesseract.js
+  - Detect and validate barcodes within uploaded images
+  - Classify extracted information (product name, ingredients, size, weight, volume, etc.)
+  - Save product details to the database
 - **Product Information Retrieval**: Automatically fetch product details from external APIs
 - **Inventory Management**: Track and manage your home supplies
 - **Web-Based Interface**: Access your inventory from any device with a modern web browser
@@ -16,6 +22,8 @@ Bardcode is a home supply management system that helps you track and manage hous
 - **Entity Framework Core**: Database access with SQLite
 - **ASP.NET Core**: RESTful API services
 - **.NET Aspire**: Distributed application orchestration
+- **Tesseract.js**: OCR (Optical Character Recognition) for extracting text from product images
+- **Quagga.js**: Barcode detection and scanning from camera and images
 
 ## Prerequisites
 
@@ -135,6 +143,41 @@ dotnet run --project Bardcoded.ApiService/Bardcoded.ApiService.csproj
 ```bash
 dotnet run --project Bardcoded.Wasm/Bardcoded.Wasm.csproj
 ```
+
+## Using the Application
+
+### Barcode Scanning
+
+Navigate to the home page and use the barcode scanner to scan product barcodes using your device's camera. The system will attempt to retrieve product information from configured external APIs and display it to you.
+
+### Product OCR
+
+The Product OCR feature allows you to extract product information from images using optical character recognition. This is useful when product barcodes aren't found in external databases or when you want to manually add product details.
+
+To use Product OCR:
+
+1. Navigate to `/ocr/product` in the application
+2. Enter the product's barcode in the barcode input field
+3. Upload one or more images of the product (front label, back label, nutrition facts, etc.)
+   - The system supports common image formats (PNG, JPG, JPEG)
+   - Images should be clear and well-lit for best OCR results
+4. The application will:
+   - Display your uploaded images
+   - Perform OCR on each image to extract text
+   - Attempt to detect the barcode in the images and validate it matches the barcode you entered
+   - Draw bounding boxes around detected text and barcodes on the images
+5. Review the extracted text from all images
+6. Fill in or update the product information fields:
+   - **Product Name**: Name of the product
+   - **Description/Ingredients**: Product description, ingredients list, or other details
+   - **Size/Weight/Volume**: Product size (e.g., "500g", "1L", "12oz")
+7. Click "Save Product" to store the product information in the database
+
+**Technical Details:**
+- OCR is powered by [Tesseract.js](https://tesseract.projectnapier.com/), a pure JavaScript port of the Tesseract OCR engine
+- Barcode detection in images uses the Quagga.js library
+- The first uploaded image is used as the product's primary image
+- All extracted text is displayed for review and manual classification
 
 ## Running Tests
 
