@@ -21,8 +21,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bardcoded.PlaywrightTests", "Bardcoded.PlaywrightTests\Bardcoded.PlaywrightTests.csproj", "{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -105,18 +103,6 @@ Global
 		{8E843BE6-6367-40DC-B62F-FFDA9160B42B}.Release|x64.Build.0 = Release|Any CPU
 		{8E843BE6-6367-40DC-B62F-FFDA9160B42B}.Release|x86.ActiveCfg = Release|Any CPU
 		{8E843BE6-6367-40DC-B62F-FFDA9160B42B}.Release|x86.Build.0 = Release|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Debug|x64.Build.0 = Debug|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Debug|x86.Build.0 = Debug|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Release|x64.ActiveCfg = Release|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Release|x64.Build.0 = Release|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Release|x86.ActiveCfg = Release|Any CPU
-		{4F3F97D8-79A1-45B5-A2EB-4520CDD1977B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
