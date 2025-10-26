@@ -209,8 +209,9 @@ protected override void OnModelCreating(ModelBuilder builder)
 - Always review generated migrations before applying
 
 #### **Query Patterns**
-- Use `SingleOrDefaultAsync()` when expecting zero or one result
-- Use `FirstAsync()` or `FirstOrDefaultAsync()` when expecting one or more results
+- Use `SingleOrDefaultAsync()` when expecting zero or one result and want an exception if more than one exists
+- Use `FirstAsync()` when expecting at least one result (throws if none found) and want only the first one
+- Use `FirstOrDefaultAsync()` when expecting zero or more results and want only the first one (or default if none)
 - Use `ToListAsync()` for retrieving collections
 - Avoid `ToList()` on IQueryable - use async equivalents
 
