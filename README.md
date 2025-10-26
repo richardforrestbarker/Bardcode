@@ -425,6 +425,39 @@ In this example, Open Food Facts is queried first (free and no authentication re
 
 Bardcode uses ASP.NET Core Identity for user authentication and authorization. The Identity system is configured with its own separate database and uses GUIDs for all Identity-related entity IDs.
 
+### Enabling/Disabling Authentication
+
+Authentication and authorization can be toggled using the `AuthNZ` feature flag in the application configuration:
+
+```json
+"Application": {
+  "Features": {
+    "FetchFromApis": true,
+    "UseDatabase": true,
+    "UseCache": false,
+    "AuthNZ": false
+  }
+}
+```
+
+**Important Notes:**
+- **Default**: `AuthNZ` is set to `false` by default (authentication disabled)
+- **Development**: `AuthNZ` is set to `true` in `appsettings.Development.json` to enable authentication during development
+- **Production**: Should be set to `true` for production environments
+- **Tests**: Default value of `false` ensures tests run without authentication requirements
+
+When `AuthNZ` is disabled:
+- All API endpoints are accessible without authentication
+- Identity endpoints (`/identity/*`) are not mapped
+- User seeding does not occur
+- No authentication middleware is applied
+
+When `AuthNZ` is enabled:
+- All barcode endpoints require authentication
+- User management endpoints require Owner or Admin role
+- Identity API endpoints are available at `/identity`
+- Default owner and admin users are created on startup
+
 ### Identity Configuration
 
 Identity settings are configured in `Bardcoded.ApiService/appsettings.json` under the `Identity` section:

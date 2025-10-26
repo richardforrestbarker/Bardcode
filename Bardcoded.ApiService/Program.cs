@@ -58,67 +58,82 @@ builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
 builder.Services.AddCors();
 
-// Add Identity services
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(identityConnectionString));
+// Check if AuthNZ feature is enabled
+var authNZEnabled = builder.Configuration.GetValue<bool>("Application:Features:AuthNZ", false);
 
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+if (authNZEnabled)
 {
-    // Password settings from configuration
-    var passwordConfig = builder.Configuration.GetSection("Identity:Password");
-    options.Password.RequiredLength = passwordConfig.GetValue<int>("RequiredLength", 8);
-    options.Password.RequireDigit = passwordConfig.GetValue<bool>("RequireDigit", true);
-    options.Password.RequireLowercase = passwordConfig.GetValue<bool>("RequireLowercase", true);
-    options.Password.RequireUppercase = passwordConfig.GetValue<bool>("RequireUppercase", true);
-    options.Password.RequireNonAlphanumeric = passwordConfig.GetValue<bool>("RequireNonAlphanumeric", true);
-    options.Password.RequiredUniqueChars = passwordConfig.GetValue<int>("RequiredUniqueChars", 1);
+    // Add Identity services
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlite(identityConnectionString));
 
-    // Lockout settings from configuration
-    var lockoutConfig = builder.Configuration.GetSection("Identity:Lockout");
-    options.Lockout.DefaultLockoutTimeSpan = lockoutConfig.GetValue<TimeSpan>("DefaultLockoutTimeSpan", TimeSpan.FromMinutes(5));
-    options.Lockout.MaxFailedAccessAttempts = lockoutConfig.GetValue<int>("MaxFailedAccessAttempts", 5);
-    options.Lockout.AllowedForNewUsers = lockoutConfig.GetValue<bool>("AllowedForNewUsers", true);
+    builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+    {
+        // Password settings from configuration
+        var passwordConfig = builder.Configuration.GetSection("Identity:Password");
+        options.Password.RequiredLength = passwordConfig.GetValue<int>("RequiredLength", 8);
+        options.Password.RequireDigit = passwordConfig.GetValue<bool>("RequireDigit", true);
+        options.Password.RequireLowercase = passwordConfig.GetValue<bool>("RequireLowercase", true);
+        options.Password.RequireUppercase = passwordConfig.GetValue<bool>("RequireUppercase", true);
+        options.Password.RequireNonAlphanumeric = passwordConfig.GetValue<bool>("RequireNonAlphanumeric", true);
+        options.Password.RequiredUniqueChars = passwordConfig.GetValue<int>("RequiredUniqueChars", 1);
 
-    // User settings from configuration
-    var userConfig = builder.Configuration.GetSection("Identity:User");
-    options.User.RequireUniqueEmail = userConfig.GetValue<bool>("RequireUniqueEmail", true);
+        // Lockout settings from configuration
+        var lockoutConfig = builder.Configuration.GetSection("Identity:Lockout");
+        options.Lockout.DefaultLockoutTimeSpan = lockoutConfig.GetValue<TimeSpan>("DefaultLockoutTimeSpan", TimeSpan.FromMinutes(5));
+        options.Lockout.MaxFailedAccessAttempts = lockoutConfig.GetValue<int>("MaxFailedAccessAttempts", 5);
+        options.Lockout.AllowedForNewUsers = lockoutConfig.GetValue<bool>("AllowedForNewUsers", true);
 
-    // SignIn settings from configuration
-    var signInConfig = builder.Configuration.GetSection("Identity:SignIn");
-    options.SignIn.RequireConfirmedEmail = signInConfig.GetValue<bool>("RequireConfirmedEmail", false);
-    options.SignIn.RequireConfirmedPhoneNumber = signInConfig.GetValue<bool>("RequireConfirmedPhoneNumber", false);
-    options.SignIn.RequireConfirmedAccount = signInConfig.GetValue<bool>("RequireConfirmedAccount", false);
-})
-.AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders();
+        // User settings from configuration
+        var userConfig = builder.Configuration.GetSection("Identity:User");
+        options.User.RequireUniqueEmail = userConfig.GetValue<bool>("RequireUniqueEmail", true);
 
-builder.Services.AddScoped<IdentitySeeder>();
+        // SignIn settings from configuration
+        var signInConfig = builder.Configuration.GetSection("Identity:SignIn");
+        options.SignIn.RequireConfirmedEmail = signInConfig.GetValue<bool>("RequireConfirmedEmail", false);
+        options.SignIn.RequireConfirmedPhoneNumber = signInConfig.GetValue<bool>("RequireConfirmedPhoneNumber", false);
+        options.SignIn.RequireConfirmedAccount = signInConfig.GetValue<bool>("RequireConfirmedAccount", false);
+    })
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
 
-builder.Services.AddAuthentication();
-builder.Services.AddAuthorization(options =>
+    builder.Services.AddScoped<IdentitySeeder>();
+
+    builder.Services.AddAuthentication();
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("UserManagement", policy => 
+            policy.RequireRole("Owner", "Admin"));
+    });
+}
+else
 {
-    options.AddPolicy("UserManagement", policy => 
-        policy.RequireRole("Owner", "Admin"));
-});
+    // Add minimal authentication/authorization for no-auth mode
+    builder.Services.AddAuthentication();
+    builder.Services.AddAuthorization();
+}
 
 var app = builder.Build();
 
-// Seed Identity database
-using (var scope = app.Services.CreateScope())
+// Seed Identity database only if AuthNZ is enabled
+if (authNZEnabled)
 {
-    var services = scope.ServiceProvider;
-    try
+    using (var scope = app.Services.CreateScope())
     {
-        var identityContext = services.GetRequiredService<ApplicationDbContext>();
-        await identityContext.Database.EnsureCreatedAsync();
-        
-        var seeder = services.GetRequiredService<IdentitySeeder>();
-        await seeder.SeedAsync();
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while seeding the Identity database.");
+        var services = scope.ServiceProvider;
+        try
+        {
+            var identityContext = services.GetRequiredService<ApplicationDbContext>();
+            await identityContext.Database.EnsureCreatedAsync();
+            
+            var seeder = services.GetRequiredService<IdentitySeeder>();
+            await seeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            var logger = services.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "An error occurred while seeding the Identity database.");
+        }
     }
 }
 
@@ -149,6 +164,12 @@ app.UseAuthorization();
 
 app.MapDefaultEndpoints();
 app.MapControllers();
-app.MapGroup("/identity").MapIdentityApi<ApplicationUser>();
+
+// Map Identity endpoints only if AuthNZ is enabled
+if (authNZEnabled)
+{
+    app.MapGroup("/identity").MapIdentityApi<ApplicationUser>();
+}
+
 app.Run();
 

@@ -1,5 +1,5 @@
 using Bardcoded.ApiService.Data.Identity;
-using Microsoft.AspNetCore.Authorization;
+using Bardcoded.ApiService.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +9,7 @@ namespace Bardcoded.ApiService.Controllers
     [Route("/users")]
     [ApiController]
     [Produces("application/json")]
-    [Authorize(Policy = "UserManagement")]
+    [ConditionalAuthorize("UserManagement")]
     public class UsersController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;

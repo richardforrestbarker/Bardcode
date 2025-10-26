@@ -1,7 +1,7 @@
 ﻿using Bardcoded.ApiService.Data;
 using Bardcoded.Data.Messages;
 using Bardcoded.ApiService.Providers;
-using Microsoft.AspNetCore.Authorization;
+using Bardcoded.ApiService.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 
@@ -10,7 +10,7 @@ namespace Bardcoded.ApiService.Controllers
     [Route("/item")]
     [ApiController]
     [Produces("application/json")]
-    [Authorize]
+    [ConditionalAuthorize]
     public class ItemsController : ControllerBase
     {
         public IBarcodeDataContext Context { get; }
