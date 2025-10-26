@@ -57,10 +57,9 @@ namespace Bardcoded.Wasm.Clients
             }
         }
 
-        public async Task<BardcodeInjestRequest?> GetItem(String bard, string barcodeType)
+        public async Task<BarcodeView?> GetItem(String bard, string barcodeType)
         {
             HttpResponseMessage response;
-            BardcodeInjestRequest? item;
             try
             {
                 response = await GetAsync($"item?bard={UrlEncoder.Default.Encode(bard)}&barcodeType={UrlEncoder.Default.Encode(barcodeType)}");
@@ -79,9 +78,14 @@ namespace Bardcoded.Wasm.Clients
                 Console.WriteLine($"Received a problem from the API. {res}");
                 return null;
             }
-            item = await response.Content.ReadFromJsonAsync<BardcodeInjestRequest?>();
-            if (item == null) return null;
-            return item;
+            if (response.StatusCode == HttpStatusCode.NonAuthoritativeInformation)
+            {
+                // we found the barcode in a network provider but not in our database
+                // this makes bardcode essentially a mirror until the data is stored.
+                var injest = await response.Content.ReadFromJsonAsync<BardcodeInjestRequest?>();
+                if (injest != null) throw new CreateBarcodeRequired(injest!);
+            }
+            return await response.Content.ReadFromJsonAsync<BarcodeView?>();
         }
 
         public async Task<List<BarcodeView>> GetItems()

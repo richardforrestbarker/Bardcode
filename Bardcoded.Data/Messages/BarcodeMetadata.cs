@@ -12,6 +12,7 @@ namespace Bardcoded.Data.Messages
         public string? ImageAsBase64 { get; set; }
         public string? ImageType { get; set; }
         public string? ProviderType { get; set; }
+        public string? ProviderJson { get; set; }
 
         public static BarcodeView Create(string Code, string name, string description, string? ImageAsBase64, string? imageType)
         {

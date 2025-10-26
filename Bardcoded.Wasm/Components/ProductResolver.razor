@@ -7,9 +7,8 @@
 
 @if (Status.Equals(ScanStatus.Scanning))
 {
-    <Bardcoded.Wasm.Components.Barcode.BarcodeReader 
-        FailureCallback=NoBarcodeScanned 
-        SuccessCallback="BarcodeSuccessfullyScanned" />
+    <Bardcoded.Wasm.Components.Barcode.BarcodeReader FailureCallback=NoBarcodeScanned
+                                                     SuccessCallback="BarcodeSuccessfullyScanned" />
 }
 else if (Status.Equals(ScanStatus.BarcodeUnreadable))
 {
@@ -24,23 +23,23 @@ else if (Status.Equals(ScanStatus.ProductFound))
 {
     <div class="card">
         <div class="card-body">
-            <h5 class="card-title">@ingestRequest!.Name</h5>
-            <p class="card-text">@ingestRequest.Description</p>
-            @if (!string.IsNullOrEmpty(ingestRequest.ProviderType))
+            <h5 class="card-title">@view!.Name</h5>
+            <p class="card-text">@view.Description</p>
+            @if (!string.IsNullOrEmpty(view.ProviderType))
             {
-                <p><small class="text-muted">Provider: <strong>@ingestRequest.ProviderType</strong></small></p>
+                <p><small class="text-muted">Provider: <strong>@view.ProviderType</strong></small></p>
             }
-            @if (!string.IsNullOrEmpty(ingestRequest.ProviderJson))
+            @if (!string.IsNullOrEmpty(view.ProviderJson))
             {
                 <details>
                     <summary>Provider Data</summary>
-                    <pre class="bg-light p-2" style="max-height: 200px; overflow-y: auto;">@ingestRequest.ProviderJson</pre>
+                    <pre class="bg-light p-2" style="max-height: 200px; overflow-y: auto;">@view.ProviderJson</pre>
                 </details>
             }
         </div>
     </div>
     <div class="btn-group mt-3">
-        <a class="btn btn-outline-primary" href="update/@ingestRequest.Bard">Update Information</a>
+        <a class="btn btn-outline-primary" href="update/@view.Code">Update Information</a>
     </div>
 }
 else if (Status.Equals(ScanStatus.ProductNotFound))
@@ -109,7 +108,7 @@ else if (Error != null)
         </Message>
     </Notification>
 }
-<hr/>
+<hr />
 <div class="btn-group">
     <button class="btn btn-outline-warning" type="reset" @onclick="Reset">Reset</button>
 </div>
@@ -120,8 +119,18 @@ else if (Error != null)
     private bool loading = true;
     private bool isAddingToDb = false;
     private ScanStatus Status { get; set; } = ScanStatus.Scanning;
+    /// <summary>
+    /// This is the result of we read from the image.
+    /// </summary>
     private BarcodeResult? Result { get; set; } = null;
+    /// <summary>
+    /// if the barcode was found in a network provider, this is the ingest request we got from the API.
+    /// </summary>
     private BardcodeInjestRequest? ingestRequest { get; set; } = null;
+    /// <summary>
+    /// If the barcode was found in the database (or cache), this is the view we got from the API.
+    /// </summary>
+    private BarcodeView? view { get; set; } = null;
     private Exception? Error { get; set; } = null;
 
     protected override async Task OnInitializedAsync()
@@ -147,10 +156,10 @@ else if (Error != null)
     {
         try
         {
-            ingestRequest = await client.GetItem(barcode, barcodeType);
-            if (ingestRequest != null)
+            view = await client.GetItem(barcode, barcodeType);
+            if (view != null)
             {
-                Console.WriteLine($"Product found: {ingestRequest.Name}");
+                Console.WriteLine($"Product found: {view.Name}");
                 Status = ScanStatus.ProductFound;
             }
             else
@@ -160,6 +169,12 @@ else if (Error != null)
                 // Check if we got data from the provider
                 Status = ScanStatus.ProductNotFound;
             }
+        }
+        catch (CreateBarcodeRequired create)
+        {
+            ingestRequest = create.BardcodeInjestRequest;
+            Status = ScanStatus.ProductNotFound;
+            view = null;
         }
         catch (Exception ex)
         {
@@ -171,10 +186,10 @@ else if (Error != null)
     public async Task AddToDatabase()
     {
         if (ingestRequest == null) return;
-        
+
         isAddingToDb = true;
         await InvokeAsync(StateHasChanged);
-        
+
         try
         {
             var result = await client.CreateItem(ingestRequest);
