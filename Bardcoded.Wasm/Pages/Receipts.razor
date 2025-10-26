@@ -1,0 +1,37 @@
+@page "/receipts"
+@using Bardcoded.Wasm.Components
+
+<PageTitle>Receipt OCR - Bardcode</PageTitle>
+
+<div class="container mt-4">
+    <h1>Receipt OCR</h1>
+    <p class="lead">Upload and process receipt images to extract structured data</p>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <ReceiptCapture />
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">How it works</h5>
+                    <ol class="small">
+                        <li>Select one or more receipt images from your device</li>
+                        <li>Upload the images for processing</li>
+                        <li>Our AI-powered OCR extracts text and identifies key fields</li>
+                        <li>Review and correct the extracted data if needed</li>
+                        <li>Save the receipt to your inventory</li>
+                    </ol>
+                    
+                    <h6 class="mt-3">Tips for best results</h6>
+                    <ul class="small">
+                        <li>Ensure good lighting when capturing images</li>
+                        <li>Keep the receipt flat and avoid shadows</li>
+                        <li>Include the entire receipt in the image</li>
+                        <li>Use higher resolution images (300+ DPI recommended)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

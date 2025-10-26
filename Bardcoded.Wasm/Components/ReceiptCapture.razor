@@ -1,0 +1,269 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject ILogger<ReceiptCapture> Logger
+
+<div class="receipt-capture">
+    <h3>Capture Receipt</h3>
+    
+    @if (isUploading)
+    {
+        <div class="alert alert-info">
+            <div class="spinner-border spinner-border-sm me-2" role="status">
+                <span class="visually-hidden">Uploading...</span>
+            </div>
+            Uploading receipt images... @uploadProgress%
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">
+            <strong>Error:</strong> @errorMessage
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(jobId))
+    {
+        <div class="alert alert-success">
+            <strong>Success!</strong> Receipt uploaded successfully.
+            <br />
+            Job ID: @jobId
+            <br />
+            <button class="btn btn-sm btn-primary mt-2" @onclick="CheckStatus">Check Status</button>
+            <button class="btn btn-sm btn-secondary mt-2 ms-2" @onclick="Reset">Upload Another</button>
+        </div>
+        
+        @if (processingStatus != null)
+        {
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h5 class="card-title">Processing Status</h5>
+                    <p><strong>Status:</strong> @processingStatus.Status</p>
+                    <p><strong>Progress:</strong> @processingStatus.Progress%</p>
+                    @if (!string.IsNullOrEmpty(processingStatus.Message))
+                    {
+                        <p><strong>Message:</strong> @processingStatus.Message</p>
+                    }
+                    
+                    @if (processingStatus.Status == "done")
+                    {
+                        <button class="btn btn-success" @onclick="ViewResult">View Result</button>
+                    }
+                    else if (processingStatus.Status == "processing")
+                    {
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: @(processingStatus.Progress)%"
+                                 aria-valuenow="@processingStatus.Progress" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="mb-3">
+            <label for="receiptFiles" class="form-label">Select receipt images (supports multiple pages)</label>
+            <InputFile id="receiptFiles" 
+                       class="form-control" 
+                       multiple 
+                       accept="image/*" 
+                       OnChange="HandleFileSelection" />
+            <div class="form-text">Supported formats: JPG, PNG, PDF. Maximum 10MB per file.</div>
+        </div>
+        
+        @if (selectedFiles.Any())
+        {
+            <div class="selected-files mb-3">
+                <h5>Selected Files (@selectedFiles.Count)</h5>
+                <ul class="list-group">
+                    @foreach (var file in selectedFiles)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            @file.Name
+                            <span class="badge bg-secondary">@FormatFileSize(file.Size)</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Optional Information</label>
+                <input type="text" class="form-control mb-2" placeholder="Merchant ID (optional)" @bind="merchantId" />
+                <input type="text" class="form-control mb-2" placeholder="Timezone (optional, e.g., America/New_York)" @bind="timezone" />
+            </div>
+            
+            <button class="btn btn-primary" @onclick="UploadReceipt" disabled="@isUploading">
+                <i class="bi bi-cloud-upload"></i> Upload Receipt
+            </button>
+            <button class="btn btn-secondary ms-2" @onclick="ClearSelection">
+                Clear Selection
+            </button>
+        }
+    }
+</div>
+
+@code {
+    private List<IBrowserFile> selectedFiles = new();
+    private bool isUploading = false;
+    private int uploadProgress = 0;
+    private string? errorMessage;
+    private string? jobId;
+    private string? merchantId;
+    private string? timezone;
+    private ReceiptStatusResponse? processingStatus;
+    
+    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    
+    private void HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        selectedFiles.Clear();
+        errorMessage = null;
+        
+        foreach (var file in e.GetMultipleFiles(10)) // Max 10 files
+        {
+            if (file.Size > MaxFileSize)
+            {
+                errorMessage = $"File {file.Name} exceeds maximum size of 10MB";
+                return;
+            }
+            selectedFiles.Add(file);
+        }
+    }
+    
+    private void ClearSelection()
+    {
+        selectedFiles.Clear();
+        errorMessage = null;
+    }
+    
+    private void Reset()
+    {
+        selectedFiles.Clear();
+        errorMessage = null;
+        jobId = null;
+        merchantId = null;
+        timezone = null;
+        processingStatus = null;
+        uploadProgress = 0;
+    }
+    
+    private async Task UploadReceipt()
+    {
+        if (!selectedFiles.Any())
+        {
+            errorMessage = "Please select at least one file";
+            return;
+        }
+        
+        isUploading = true;
+        errorMessage = null;
+        uploadProgress = 0;
+        
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            
+            // Add files
+            foreach (var file in selectedFiles)
+            {
+                var fileContent = new StreamContent(file.OpenReadStream(MaxFileSize));
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+                content.Add(fileContent, "files", file.Name);
+            }
+            
+            // Add optional metadata
+            if (!string.IsNullOrWhiteSpace(merchantId))
+                content.Add(new StringContent(merchantId), "merchantId");
+            
+            if (!string.IsNullOrWhiteSpace(timezone))
+                content.Add(new StringContent(timezone), "timezone");
+            
+            uploadProgress = 50;
+            
+            var response = await Http.PostAsync("/api/receipts/upload", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ReceiptUploadResponse>();
+                if (result != null)
+                {
+                    jobId = result.JobId;
+                    uploadProgress = 100;
+                    Logger.LogInformation("Receipt uploaded successfully. Job ID: {JobId}", jobId);
+                }
+            }
+            else
+            {
+                errorMessage = $"Upload failed: {response.StatusCode}";
+                Logger.LogError("Receipt upload failed with status {StatusCode}", response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error uploading receipt: {ex.Message}";
+            Logger.LogError(ex, "Error uploading receipt");
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+    
+    private async Task CheckStatus()
+    {
+        if (string.IsNullOrEmpty(jobId))
+            return;
+        
+        try
+        {
+            processingStatus = await Http.GetFromJsonAsync<ReceiptStatusResponse>($"/api/receipts/status/{jobId}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error checking status: {ex.Message}";
+            Logger.LogError(ex, "Error checking receipt status");
+        }
+    }
+    
+    private void ViewResult()
+    {
+        // Navigate to result view or display inline
+        // TODO: Implement result display
+    }
+    
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+    
+    // Data models (should be in shared assembly)
+    public class ReceiptUploadResponse
+    {
+        public required string JobId { get; set; }
+        public string Status { get; set; } = "processing";
+        public string? StatusUrl { get; set; }
+        public string? ResultUrl { get; set; }
+    }
+    
+    public class ReceiptStatusResponse
+    {
+        public required string JobId { get; set; }
+        public required string Status { get; set; }
+        public int Progress { get; set; }
+        public string? Message { get; set; }
+        public string? Error { get; set; }
+    }
+}
