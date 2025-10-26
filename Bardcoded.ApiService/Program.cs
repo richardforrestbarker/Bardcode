@@ -1,6 +1,7 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Data.Identity;
 using Bardcoded.ApiService.Providers;
+using Bardcoded.ApiService.Services;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -63,6 +64,7 @@ var authNZEnabled = builder.Configuration.GetValue<bool>("Application:Features:A
 
 if (authNZEnabled)
 {
+    builder.Services.AddTransient<IEmailSender<ApplicationUser>, NoOpEmailSender>();
     // Add Identity services
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
         options.UseSqlite(identityConnectionString));
@@ -105,6 +107,7 @@ if (authNZEnabled)
         options.AddPolicy("UserManagement", policy => 
             policy.RequireRole("Owner", "Admin"));
     });
+    
 }
 else
 {
