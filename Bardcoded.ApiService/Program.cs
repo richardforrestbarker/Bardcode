@@ -1,6 +1,8 @@
 using Bardcoded.ApiService.Data;
+using Bardcoded.ApiService.Data.Identity;
 using Bardcoded.ApiService.Providers;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +19,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 var connectionString = builder.Configuration.GetConnectionString("Barcode") ?? "";
+var identityConnectionString = builder.Configuration.GetConnectionString("Identity") ?? "Data Source=identity.db";
 
 var corsconfig = builder.Configuration.GetRequiredSection("Cors").Get<Dictionary<string, CorsPolicy>>();
 
@@ -55,7 +58,70 @@ builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
 builder.Services.AddCors();
 
+// Add Identity services
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlite(identityConnectionString));
+
+builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+{
+    // Password settings from configuration
+    var passwordConfig = builder.Configuration.GetSection("Identity:Password");
+    options.Password.RequiredLength = passwordConfig.GetValue<int>("RequiredLength", 8);
+    options.Password.RequireDigit = passwordConfig.GetValue<bool>("RequireDigit", true);
+    options.Password.RequireLowercase = passwordConfig.GetValue<bool>("RequireLowercase", true);
+    options.Password.RequireUppercase = passwordConfig.GetValue<bool>("RequireUppercase", true);
+    options.Password.RequireNonAlphanumeric = passwordConfig.GetValue<bool>("RequireNonAlphanumeric", true);
+    options.Password.RequiredUniqueChars = passwordConfig.GetValue<int>("RequiredUniqueChars", 1);
+
+    // Lockout settings from configuration
+    var lockoutConfig = builder.Configuration.GetSection("Identity:Lockout");
+    options.Lockout.DefaultLockoutTimeSpan = lockoutConfig.GetValue<TimeSpan>("DefaultLockoutTimeSpan", TimeSpan.FromMinutes(5));
+    options.Lockout.MaxFailedAccessAttempts = lockoutConfig.GetValue<int>("MaxFailedAccessAttempts", 5);
+    options.Lockout.AllowedForNewUsers = lockoutConfig.GetValue<bool>("AllowedForNewUsers", true);
+
+    // User settings from configuration
+    var userConfig = builder.Configuration.GetSection("Identity:User");
+    options.User.RequireUniqueEmail = userConfig.GetValue<bool>("RequireUniqueEmail", true);
+
+    // SignIn settings from configuration
+    var signInConfig = builder.Configuration.GetSection("Identity:SignIn");
+    options.SignIn.RequireConfirmedEmail = signInConfig.GetValue<bool>("RequireConfirmedEmail", false);
+    options.SignIn.RequireConfirmedPhoneNumber = signInConfig.GetValue<bool>("RequireConfirmedPhoneNumber", false);
+    options.SignIn.RequireConfirmedAccount = signInConfig.GetValue<bool>("RequireConfirmedAccount", false);
+})
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddDefaultTokenProviders();
+
+builder.Services.AddScoped<IdentitySeeder>();
+
+builder.Services.AddAuthentication();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("UserManagement", policy => 
+        policy.RequireRole("Owner", "Admin"));
+});
+
 var app = builder.Build();
+
+// Seed Identity database
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var identityContext = services.GetRequiredService<ApplicationDbContext>();
+        await identityContext.Database.EnsureCreatedAsync();
+        
+        var seeder = services.GetRequiredService<IdentitySeeder>();
+        await seeder.SeedAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding the Identity database.");
+    }
+}
+
 app.UsePathBase("/");
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
@@ -78,7 +144,11 @@ app.UseCors(c =>
     }
 });
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapDefaultEndpoints();
 app.MapControllers();
+app.MapGroup("/identity").MapIdentityApi<ApplicationUser>();
 app.Run();
 
