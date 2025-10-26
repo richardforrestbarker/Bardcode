@@ -29,7 +29,7 @@ class FieldExtractor:
         
         # Regex patterns for field extraction
         self.patterns = {
-            'amount': re.compile(r'\$?\s*(\d+[\.,]\d{2})'),
+            'amount': re.compile(r'\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'),  # Support thousands separators
             'date': [
                 re.compile(r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})'),
                 re.compile(r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})'),
@@ -52,7 +52,8 @@ class FieldExtractor:
         match = self.patterns['amount'].search(text)
         if match:
             try:
-                amount_str = match.group(1).replace(',', '.')
+                # Remove currency symbols and thousands separators
+                amount_str = match.group(1).replace(',', '')
                 return Decimal(amount_str)
             except InvalidOperation:
                 logger.warning(f"Failed to parse amount: {text}")

@@ -78,6 +78,7 @@ Convert annotations to LayoutLM format:
 ```python
 from datasets import Dataset
 from transformers import LayoutLMv3Processor
+from PIL import Image
 
 def preprocess_dataset(annotations, processor):
     """Convert annotations to LayoutLMv3 format."""
@@ -165,7 +166,13 @@ Key hyperparameters to tune:
 
 ### 3. Data Augmentation
 
-Improve robustness with augmentation:
+Improve robustness with augmentation. Install albumentations first:
+
+```bash
+pip install albumentations
+```
+
+Then use augmentation transforms:
 
 ```python
 import albumentations as A
