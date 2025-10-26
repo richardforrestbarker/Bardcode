@@ -421,6 +421,221 @@ export Application__Integrations__2__key="your-barcodelookup-key"
 
 In this example, Open Food Facts is queried first (free and no authentication required), followed by UPC Database, and finally Barcode Lookup.
 
+## Authentication and Authorization
+
+Bardcode uses ASP.NET Core Identity for user authentication and authorization. The Identity system is configured with its own separate database and uses GUIDs for all Identity-related entity IDs.
+
+### Enabling/Disabling Authentication
+
+Authentication and authorization can be toggled using the `AuthNZ` feature flag in the application configuration:
+
+```json
+"Application": {
+  "Features": {
+    "FetchFromApis": true,
+    "UseDatabase": true,
+    "UseCache": false,
+    "AuthNZ": false
+  }
+}
+```
+
+**Important Notes:**
+- **Default**: `AuthNZ` is set to `false` by default (authentication disabled)
+- **Development**: `AuthNZ` is set to `true` in `appsettings.Development.json` to enable authentication during development
+- **Production**: Should be set to `true` for production environments
+- **Tests**: Default value of `false` ensures tests run without authentication requirements
+
+When `AuthNZ` is disabled:
+- All API endpoints are accessible without authentication
+- Identity endpoints (`/identity/*`) are not mapped
+- User seeding does not occur
+- No authentication middleware is applied
+
+When `AuthNZ` is enabled:
+- All barcode endpoints require authentication
+- User management endpoints require Owner or Admin role
+- Identity API endpoints are available at `/identity`
+- Default owner and admin users are created on startup
+
+### Identity Configuration
+
+Identity settings are configured in `Bardcoded.ApiService/appsettings.json` under the `Identity` section:
+
+```json
+"Identity": {
+  "Password": {
+    "RequiredLength": 8,
+    "RequireDigit": true,
+    "RequireLowercase": true,
+    "RequireUppercase": true,
+    "RequireNonAlphanumeric": true,
+    "RequiredUniqueChars": 1
+  },
+  "Lockout": {
+    "DefaultLockoutTimeSpan": "00:05:00",
+    "MaxFailedAccessAttempts": 5,
+    "AllowedForNewUsers": true
+  },
+  "User": {
+    "RequireUniqueEmail": true
+  },
+  "SignIn": {
+    "RequireConfirmedEmail": false,
+    "RequireConfirmedPhoneNumber": false,
+    "RequireConfirmedAccount": false
+  }
+}
+```
+
+#### Password Requirements
+
+- **RequiredLength**: Minimum password length (default: 8 characters)
+- **RequireDigit**: Password must contain at least one digit (0-9)
+- **RequireLowercase**: Password must contain at least one lowercase letter (a-z)
+- **RequireUppercase**: Password must contain at least one uppercase letter (A-Z)
+- **RequireNonAlphanumeric**: Password must contain at least one special character
+- **RequiredUniqueChars**: Minimum number of unique characters in the password
+
+#### Lockout Settings
+
+- **DefaultLockoutTimeSpan**: Duration a user is locked out after exceeding failed login attempts (default: 5 minutes)
+- **MaxFailedAccessAttempts**: Number of failed login attempts before lockout (default: 5)
+- **AllowedForNewUsers**: Whether lockout applies to new users (default: true)
+
+#### User Settings
+
+- **RequireUniqueEmail**: Each email address can only be associated with one account (default: true)
+
+#### Sign-In Settings
+
+- **RequireConfirmedEmail**: Whether users must confirm their email before signing in (default: false)
+- **RequireConfirmedPhoneNumber**: Whether users must confirm their phone number (default: false)
+- **RequireConfirmedAccount**: Whether accounts must be confirmed before use (default: false)
+
+### Database Configuration
+
+The Identity system uses a separate SQLite database from the main barcode database. The connection strings are configured in `appsettings.json`:
+
+```json
+"ConnectionStrings": {
+  "Barcode": "Data Source=bardcode.db",
+  "Identity": "Data Source=identity.db"
+}
+```
+
+You can change the Identity connection string to use a different database provider (SQL Server, PostgreSQL, etc.) by updating the connection string and modifying the `Program.cs` to use the appropriate Entity Framework provider.
+
+### Default Users
+
+Two default users are automatically created when the application starts if they don't already exist:
+
+#### Owner Account
+- **Username**: `owner`
+- **Email**: `owner@bardcode.local`
+- **Default Password**: `Owner@123456` (can be configured in appsettings.json)
+- **Role**: Owner
+- **Permissions**: Full access to user management and all application features
+- **Tagline**: "Owner account for system administration"
+
+#### Admin Account
+- **Username**: `admin`
+- **Email**: `admin@bardcode.local`
+- **Default Password**: `Admin@123456` (can be configured in appsettings.json)
+- **Role**: Admin
+- **Permissions**: Access to user management and all application features
+- **Tagline**: "Admin account for user management"
+
+**IMPORTANT**: Change these default passwords immediately in a production environment!
+
+### Configuring Default User Passwords
+
+To change the default passwords for owner and admin users, update the configuration in `appsettings.json`:
+
+```json
+"Identity": {
+  "DefaultUsers": {
+    "Owner": {
+      "Password": "YourSecureOwnerPassword123!"
+    },
+    "Admin": {
+      "Password": "YourSecureAdminPassword123!"
+    }
+  }
+}
+```
+
+Alternatively, use environment variables or user secrets for better security:
+
+```bash
+# Using environment variables
+export Identity__DefaultUsers__Owner__Password="YourSecureOwnerPassword123!"
+export Identity__DefaultUsers__Admin__Password="YourSecureAdminPassword123!"
+
+# Using .NET user secrets (development only)
+dotnet user-secrets set "Identity:DefaultUsers:Owner:Password" "YourSecureOwnerPassword123!"
+dotnet user-secrets set "Identity:DefaultUsers:Admin:Password" "YourSecureAdminPassword123!"
+```
+
+### User Taglines
+
+The ApplicationUser model extends ASP.NET Core Identity's IdentityUser with an additional `Tagline` property. This allows users to set a custom tagline to verify they're on the correct site (similar to a security phrase).
+
+### Creating New Users
+
+Users can register through the Identity API endpoints at `/identity/register`. The registration endpoint accepts the following JSON:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+### Managing Users
+
+User management is restricted to users with the `Owner` or `Admin` role. The following endpoints are available at `/users`:
+
+- **GET /users**: List all users
+- **GET /users/{id}**: Get a specific user by ID
+- **DELETE /users/{id}**: Delete a user
+
+### Authorization Policies
+
+The application uses the following authorization policies:
+
+- **Default Policy**: All API endpoints require authentication (except Identity endpoints)
+- **UserManagement Policy**: Restricted to users with the `Owner` or `Admin` role
+
+### Identity API Endpoints
+
+The application exposes the following Identity API endpoints under `/identity`:
+
+- **POST /identity/register**: Register a new user account
+- **POST /identity/login**: Log in with email and password
+- **POST /identity/refresh**: Refresh authentication token
+- **POST /identity/confirmEmail**: Confirm email address
+- **POST /identity/resendConfirmationEmail**: Resend email confirmation
+- **POST /identity/forgotPassword**: Request password reset
+- **POST /identity/resetPassword**: Reset password with token
+- **POST /identity/manage/2fa**: Manage two-factor authentication
+- **GET /identity/manage/info**: Get user information
+- **POST /identity/manage/info**: Update user information
+
+For detailed API documentation, run the application in development mode and access the OpenAPI/Swagger documentation.
+
+### Database Migrations
+
+To create Identity database migrations:
+
+```bash
+cd Bardcoded.ApiService
+dotnet ef migrations add MigrationName --context ApplicationDbContext
+dotnet ef database update --context ApplicationDbContext
+```
+
+The Identity database is automatically created and seeded with default users when the application starts.
+
 ## License
 
 [Specify your license here]
