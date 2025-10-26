@@ -22,6 +22,8 @@ namespace Bardcoded.Wasm
             builder.Services.AddSingleton<IFeatureManager>(builder.Configuration.GetRequiredSection("Application").Get<MyFeatureManager>() ?? new MyFeatureManager());
 
             builder.Services.AddScoped<BardcodeApiHttpClient>();
+            builder.Services.AddScoped<IInventoryApiClient>(sp => 
+                new InventoryApiClient(sp.GetRequiredService<BardcodeApiHttpClient>()));
             
             builder.RootComponents.Add<App>("#app");
             builder.RootComponents.Add<HeadOutlet>("head::after");

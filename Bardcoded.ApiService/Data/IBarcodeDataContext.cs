@@ -24,6 +24,7 @@ namespace Bardcoded.ApiService.Data
         public DbSet<BarcodeData> Barcodes { get; set; }
         public DbSet<BarcodeUpdate> BarcodeUpdates { get; set; }
         public DbSet<BarcodeDataProvided> BarcodeDataProvided { get; set; }
+        public DbSet<InventoryItem> InventoryItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -39,6 +40,30 @@ namespace Bardcoded.ApiService.Data
                 .HasForeignKey<BarcodeDataProvided>(b => b.Bard)
                 .HasPrincipalKey<BarcodeData>(b => b.Bard)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Configure InventoryItem
+            builder.Entity<InventoryItem>()
+                .HasKey(i => i.Id);
+
+            builder.Entity<InventoryItem>()
+                .HasIndex(i => new { i.Barcode, i.BarcodeType })
+                .IsUnique();
+
+            builder.Entity<InventoryItem>()
+                .Property(i => i.RowVersion)
+                .IsRowVersion();
+
+            builder.Entity<InventoryItem>()
+                .Property(i => i.LastUpdatedBy)
+                .IsRequired();
+
+            builder.Entity<InventoryItem>()
+                .Property(i => i.Barcode)
+                .IsRequired();
+
+            builder.Entity<InventoryItem>()
+                .Property(i => i.BarcodeType)
+                .IsRequired();
         }
 
         public Task DeleteAll()

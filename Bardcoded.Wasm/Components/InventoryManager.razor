@@ -1,0 +1,252 @@
+@using Bardcoded.Data.Messages
+@using Bardcoded.Wasm.Clients
+
+<div class="inventory-section">
+    <h4>Inventory</h4>
+    
+    @if (IsLoading)
+    {
+        <p><em>Loading inventory...</em></p>
+    }
+    else if (InventoryItems.Any())
+    {
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Barcode</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Location</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in InventoryItems)
+                {
+                    <tr>
+                        <td>@item.Barcode</td>
+                        <td>@item.BarcodeType</td>
+                        <td>
+                            @if (EditingItemId == item.Id)
+                            {
+                                <input type="number" @bind="EditQuantity" class="form-control form-control-sm" min="0" />
+                            }
+                            else
+                            {
+                                <span>@item.Quantity</span>
+                            }
+                        </td>
+                        <td>@(item.Location ?? "-")</td>
+                        <td>
+                            @if (EditingItemId == item.Id)
+                            {
+                                <button class="btn btn-sm btn-success" @onclick="() => SaveQuantity(item.Id)">Save</button>
+                                <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">Cancel</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-primary" @onclick="() => StartEdit(item)">Edit</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteItem(item.Id)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p class="text-muted">No inventory items found.</p>
+    }
+
+    @if (!ShowAddForm)
+    {
+        <button class="btn btn-sm btn-success mt-2" @onclick="() => ShowAddForm = true">Add Inventory</button>
+    }
+    else
+    {
+        <div class="card mt-2">
+            <div class="card-body">
+                <h5 class="card-title">Add Inventory Item</h5>
+                <div class="form-group mb-2">
+                    <label>Barcode</label>
+                    <input type="text" @bind="NewBarcode" class="form-control form-control-sm" />
+                </div>
+                <div class="form-group mb-2">
+                    <label>Barcode Type</label>
+                    <input type="text" @bind="NewBarcodeType" class="form-control form-control-sm" placeholder="e.g., EAN13, UPC" />
+                </div>
+                <div class="form-group mb-2">
+                    <label>Quantity</label>
+                    <input type="number" @bind="NewQuantity" class="form-control form-control-sm" min="0" />
+                </div>
+                <div class="form-group mb-2">
+                    <label>Location (optional)</label>
+                    <input type="text" @bind="NewLocation" class="form-control form-control-sm" />
+                </div>
+                <button class="btn btn-sm btn-success" @onclick="CreateInventoryItem">Create</button>
+                <button class="btn btn-sm btn-secondary" @onclick="CancelAdd">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger mt-2">@ErrorMessage</div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid? ProductId { get; set; }
+
+    [Parameter]
+    public string? Barcode { get; set; }
+
+    [Parameter]
+    public string? BarcodeType { get; set; }
+
+    [Inject]
+    private IInventoryApiClient InventoryClient { get; set; } = default!;
+
+    private List<InventoryResponse> InventoryItems { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    private bool ShowAddForm { get; set; } = false;
+    private Guid? EditingItemId { get; set; }
+    private int EditQuantity { get; set; }
+    private string? ErrorMessage { get; set; }
+
+    // Add form fields
+    private string NewBarcode { get; set; } = string.Empty;
+    private string NewBarcodeType { get; set; } = string.Empty;
+    private int NewQuantity { get; set; } = 0;
+    private string? NewLocation { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadInventory();
+    }
+
+    private async Task LoadInventory()
+    {
+        IsLoading = true;
+        ErrorMessage = null;
+
+        try
+        {
+            if (ProductId.HasValue)
+            {
+                InventoryItems = await InventoryClient.GetByProductAsync(ProductId.Value);
+            }
+            else if (!string.IsNullOrEmpty(Barcode) && !string.IsNullOrEmpty(BarcodeType))
+            {
+                var item = await InventoryClient.GetByBarcodeAsync(Barcode, BarcodeType);
+                InventoryItems = item != null ? new List<InventoryResponse> { item } : new List<InventoryResponse>();
+            }
+            else
+            {
+                InventoryItems = new List<InventoryResponse>();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to load inventory: {ex.Message}";
+            InventoryItems = new List<InventoryResponse>();
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void StartEdit(InventoryResponse item)
+    {
+        EditingItemId = item.Id;
+        EditQuantity = item.Quantity;
+        ErrorMessage = null;
+    }
+
+    private void CancelEdit()
+    {
+        EditingItemId = null;
+        EditQuantity = 0;
+        ErrorMessage = null;
+    }
+
+    private async Task SaveQuantity(Guid itemId)
+    {
+        ErrorMessage = null;
+
+        try
+        {
+            var request = new InventoryUpdateCountRequest
+            {
+                SetCount = EditQuantity
+            };
+
+            await InventoryClient.UpdateCountAsync(itemId, request);
+            await LoadInventory();
+            EditingItemId = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to update quantity: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteItem(Guid itemId)
+    {
+        ErrorMessage = null;
+
+        try
+        {
+            await InventoryClient.DeleteAsync(itemId);
+            await LoadInventory();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to delete item: {ex.Message}";
+        }
+    }
+
+    private async Task CreateInventoryItem()
+    {
+        ErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(NewBarcode) || string.IsNullOrWhiteSpace(NewBarcodeType))
+        {
+            ErrorMessage = "Barcode and Barcode Type are required.";
+            return;
+        }
+
+        try
+        {
+            var request = new InventoryCreateRequest
+            {
+                ProductId = ProductId,
+                Barcode = NewBarcode,
+                BarcodeType = NewBarcodeType,
+                Quantity = NewQuantity,
+                Location = NewLocation
+            };
+
+            await InventoryClient.CreateAsync(request);
+            await LoadInventory();
+            CancelAdd();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to create inventory item: {ex.Message}";
+        }
+    }
+
+    private void CancelAdd()
+    {
+        ShowAddForm = false;
+        NewBarcode = string.Empty;
+        NewBarcodeType = string.Empty;
+        NewQuantity = 0;
+        NewLocation = null;
+        ErrorMessage = null;
+    }
+}
