@@ -18,4 +18,12 @@
         public String NewBarcodeJson { get; set; }
         public DateTime UpdateDate { get; set; }
     }
+
+    public class BarcodeDataProvided
+    {
+        public String Bard { get; set; }
+        public DateTime LastUpdated { get; set; }
+        public String ProviderJson { get; set; }
+        public String ProviderType { get; set; }
+    }
 }

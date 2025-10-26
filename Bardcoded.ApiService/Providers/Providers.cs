@@ -123,7 +123,8 @@ public class OpenFoodFactsApiProvider(ApiProviderConfiguration c) : ApiProvider(
                 name,
                 description,
                 imageUrl != null ? UrlEncoder.Default.Encode(imageUrl) : null,
-                "jpg"
+                "jpg",
+                providerType: "OpenFoodFacts",
             );
         }
         else

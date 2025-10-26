@@ -113,7 +113,7 @@
         try
         {
             var res = await Http.CreateItem(Model);
-            Console.WriteLine($"recieved {res?.Code}");
+            Console.WriteLine($"recieved {res?.Bard}");
             if (res != null)
             {
                 navMan.NavigateTo($"item/{Model.Bard}");

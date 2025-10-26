@@ -7,9 +7,8 @@
 
 @if (Status.Equals(ScanStatus.Scanning))
 {
-    <Bardcoded.Wasm.Components.Barcode.BarcodeReader 
-        FailureCallback=NoBarcodeScanned 
-        SuccessCallback="BarcodeSuccessfullyScanned" />
+    <Bardcoded.Wasm.Components.Barcode.BarcodeReader FailureCallback=NoBarcodeScanned
+                                                     SuccessCallback="BarcodeSuccessfullyScanned" />
 }
 else if (Status.Equals(ScanStatus.BarcodeUnreadable))
 {
@@ -22,17 +21,68 @@ else if (Status.Equals(ScanStatus.Searching))
 }
 else if (Status.Equals(ScanStatus.ProductFound))
 {
-    <div>@barcodeView!.Name</div>
-    <div>@barcodeView.Description</div>
-    <div class="btn-group">
-        <a class="btn btn-outline-primary" href="update/@barcodeView.Code">Update Information</a>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">@view!.Name</h5>
+            <p class="card-text">@view.Description</p>
+            @if (!string.IsNullOrEmpty(view.ProviderType))
+            {
+                <p><small class="text-muted">Provider: <strong>@view.ProviderType</strong></small></p>
+            }
+            @if (!string.IsNullOrEmpty(view.ProviderJson))
+            {
+                <details>
+                    <summary>Provider Data</summary>
+                    <pre class="bg-light p-2" style="max-height: 200px; overflow-y: auto;">@view.ProviderJson</pre>
+                </details>
+            }
+        </div>
+    </div>
+    <div class="btn-group mt-3">
+        <a class="btn btn-outline-primary" href="update/@view.Code">Update Information</a>
     </div>
 }
 else if (Status.Equals(ScanStatus.ProductNotFound))
 {
-    <div class="btn-group">
-        <a class="btn btn-outline-primary" href="add/@Result.Text">Add To Database</a>
-    </div>
+    @if (ingestRequest != null)
+    {
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@ingestRequest.Name</h5>
+                <p class="card-text">@ingestRequest.Description</p>
+                @if (!string.IsNullOrEmpty(ingestRequest.ProviderType))
+                {
+                    <p><small class="text-muted">Provider: <strong>@ingestRequest.ProviderType</strong></small></p>
+                }
+                @if (!string.IsNullOrEmpty(ingestRequest.ProviderJson))
+                {
+                    <details>
+                        <summary>Provider Data</summary>
+                        <pre class="bg-light p-2" style="max-height: 200px; overflow-y: auto;">@ingestRequest.ProviderJson</pre>
+                    </details>
+                }
+            </div>
+        </div>
+        <div class="btn-group mt-3">
+            <button class="btn btn-primary" @onclick="AddToDatabase" disabled="@isAddingToDb">
+                @if (isAddingToDb)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span>Adding...</span>
+                }
+                else
+                {
+                    <span>Add To Database</span>
+                }
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="btn-group">
+            <a class="btn btn-outline-primary" href="add/@Result.Text">Add To Database (Manual)</a>
+        </div>
+    }
 }
 else if (Error != null)
 {
@@ -58,7 +108,7 @@ else if (Error != null)
         </Message>
     </Notification>
 }
-<hr/>
+<hr />
 <div class="btn-group">
     <button class="btn btn-outline-warning" type="reset" @onclick="Reset">Reset</button>
 </div>
@@ -67,9 +117,20 @@ else if (Error != null)
     [Inject] public BardcodeApiHttpClient client { get; set; }
 
     private bool loading = true;
+    private bool isAddingToDb = false;
     private ScanStatus Status { get; set; } = ScanStatus.Scanning;
+    /// <summary>
+    /// This is the result of we read from the image.
+    /// </summary>
     private BarcodeResult? Result { get; set; } = null;
-    private BarcodeView? barcodeView { get; set; } = null;
+    /// <summary>
+    /// if the barcode was found in a network provider, this is the ingest request we got from the API.
+    /// </summary>
+    private BardcodeInjestRequest? ingestRequest { get; set; } = null;
+    /// <summary>
+    /// If the barcode was found in the database (or cache), this is the view we got from the API.
+    /// </summary>
+    private BarcodeView? view { get; set; } = null;
     private Exception? Error { get; set; } = null;
 
     protected override async Task OnInitializedAsync()
@@ -95,17 +156,25 @@ else if (Error != null)
     {
         try
         {
-            barcodeView = await client.GetItem(barcode, barcodeType);
-            if (barcodeView != null)
+            view = await client.GetItem(barcode, barcodeType);
+            if (view != null)
             {
-                Console.WriteLine($"Product found: {barcodeView.Name}");
+                Console.WriteLine($"Product found: {view.Name}");
                 Status = ScanStatus.ProductFound;
             }
             else
             {
-                Console.WriteLine("Product not found.");
+                Console.WriteLine("Product not found in database, but may have data from provider.");
+                // The API now returns the ingest request even if not in DB
+                // Check if we got data from the provider
                 Status = ScanStatus.ProductNotFound;
             }
+        }
+        catch (CreateBarcodeRequired create)
+        {
+            ingestRequest = create.BardcodeInjestRequest;
+            Status = ScanStatus.ProductNotFound;
+            view = null;
         }
         catch (Exception ex)
         {
@@ -114,12 +183,41 @@ else if (Error != null)
         await InvokeAsync(StateHasChanged);
     }
 
+    public async Task AddToDatabase()
+    {
+        if (ingestRequest == null) return;
+
+        isAddingToDb = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var result = await client.CreateItem(ingestRequest);
+            if (result != null)
+            {
+                Console.WriteLine($"Successfully added {ingestRequest.Name} to database");
+                Status = ScanStatus.ProductFound;
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = ex;
+            Console.WriteLine($"Failed to add to database: {ex.Message}");
+        }
+        finally
+        {
+            isAddingToDb = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     public Task Reset()
     {
         Status = ScanStatus.Scanning;
         Result = null;
-        barcodeView = null;
+        ingestRequest = null;
         Error = null;
+        isAddingToDb = false;
         return InvokeAsync(StateHasChanged);
     }
 
