@@ -1,0 +1,414 @@
+@page "/ocr/product"
+@using Bardcoded.Data.Messages
+@using Bardcoded.Wasm.Clients
+
+<PageTitle>Product OCR</PageTitle>
+
+<div class="container mt-4">
+    <h3>Product OCR - Scan Product Details</h3>
+    
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @ErrorMessage
+            <button type="button" class="btn-close" @onclick="() => ErrorMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(SuccessMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @SuccessMessage
+            <button type="button" class="btn-close" @onclick="() => SuccessMessage = string.Empty"></button>
+        </div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Upload Product Images</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="barcodeInput" class="form-label">Barcode</label>
+                <input type="text" class="form-control" id="barcodeInput" @bind="Barcode" placeholder="Enter barcode" />
+            </div>
+            
+            <div class="mb-3">
+                <label for="imageUpload" class="form-label">Product Images (Front, Back, etc.)</label>
+                <InputFile OnChange="HandleImageUpload" multiple accept="image/*" class="form-control" id="imageUpload" disabled="@IsProcessing" />
+                <div class="form-text">Upload one or more images of the product including at least a front shot.</div>
+            </div>
+
+            @if (IsProcessing)
+            {
+                <div class="d-flex align-items-center">
+                    <strong>Processing images...</strong>
+                    <div class="spinner-border ms-auto" role="status" aria-hidden="true"></div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (UploadedImages.Count > 0)
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Uploaded Images</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    @foreach (var img in UploadedImages)
+                    {
+                        <div class="col-md-4 mb-3">
+                            <div class="position-relative">
+                                <img src="@img.DataUrl" class="img-fluid" alt="Product image" />
+                                <canvas id="@img.CanvasId" class="position-absolute top-0 start-0" style="pointer-events: none;"></canvas>
+                            </div>
+                            @if (!string.IsNullOrEmpty(img.DetectedBarcode))
+                            {
+                                <div class="badge bg-success mt-2">Barcode Found: @img.DetectedBarcode</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (OcrResults.Count > 0)
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Extracted Text - Select and Classify</h5>
+            </div>
+            <div class="card-body">
+                @foreach (var result in OcrResults)
+                {
+                    <div class="mb-3 p-3 border rounded">
+                        <h6>From Image @(UploadedImages.IndexOf(result.Image) + 1)</h6>
+                        <div class="mb-2">
+                            <strong>Full Text:</strong>
+                            <pre class="bg-light p-2">@result.Text</pre>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Classify Product Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="productName" class="form-label">Product Name</label>
+                    <input type="text" class="form-control" id="productName" @bind="ProductData.Name" placeholder="Enter or paste product name" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="productDescription" class="form-label">Description / Ingredients</label>
+                    <textarea class="form-control" id="productDescription" rows="3" @bind="ProductData.Description" placeholder="Enter or paste description/ingredients"></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label for="productSize" class="form-label">Size / Weight / Volume</label>
+                    <input type="text" class="form-control" id="productSize" @bind="ProductData.WeightVolume" placeholder="e.g., 500g, 1L, 12oz" />
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" @onclick="SaveProduct" disabled="@IsSaving">
+                        @if (IsSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>Save Product</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Inject] public IJSRuntime JSRuntime { get; set; } = default!;
+    [Inject] public BardcodeApiHttpClient ApiClient { get; set; } = default!;
+
+    private string Barcode { get; set; } = string.Empty;
+    private string ErrorMessage { get; set; } = string.Empty;
+    private string SuccessMessage { get; set; } = string.Empty;
+    private bool IsProcessing { get; set; } = false;
+    private bool IsSaving { get; set; } = false;
+
+    private List<ImageData> UploadedImages { get; set; } = new();
+    private List<OcrResult> OcrResults { get; set; } = new();
+    
+    private ProductFormData ProductData { get; set; } = new();
+
+    private IJSObjectReference? _jsModule;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./Pages/Ocr/Product.razor.js");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading JS module: {ex.Message}");
+                ErrorMessage = "Failed to load OCR module. Please refresh the page.";
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        ErrorMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(Barcode))
+        {
+            ErrorMessage = "Please enter a barcode first.";
+            return;
+        }
+
+        IsProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            var files = e.GetMultipleFiles(maximumFileCount: 10);
+            
+            foreach (var file in files)
+            {
+                // Read file as base64
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB max
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                var dataUrl = $"data:{file.ContentType};base64,{base64}";
+
+                var imageData = new ImageData
+                {
+                    DataUrl = dataUrl,
+                    FileName = file.Name,
+                    CanvasId = $"canvas_{Guid.NewGuid():N}"
+                };
+
+                UploadedImages.Add(imageData);
+            }
+
+            StateHasChanged();
+
+            // Process OCR on all images
+            await ProcessImagesOcr();
+
+            // Check for barcode in images
+            await ValidateBarcodeInImages();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error processing images: {ex.Message}";
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ProcessImagesOcr()
+    {
+        if (_jsModule == null) return;
+
+        OcrResults.Clear();
+
+        foreach (var image in UploadedImages)
+        {
+            try
+            {
+                var text = await _jsModule.InvokeAsync<string>("performOcr", image.DataUrl);
+                
+                var ocrResult = new OcrResult
+                {
+                    Image = image,
+                    Text = text
+                };
+
+                OcrResults.Add(ocrResult);
+
+                // Auto-populate first image's text if fields are empty
+                if (OcrResults.Count == 1)
+                {
+                    var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length > 0 && string.IsNullOrEmpty(ProductData.Name))
+                    {
+                        ProductData.Name = lines[0].Trim();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"OCR failed for {image.FileName}: {ex.Message}");
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ValidateBarcodeInImages()
+    {
+        if (_jsModule == null) return;
+
+        foreach (var image in UploadedImages)
+        {
+            try
+            {
+                var result = await _jsModule.InvokeAsync<BarcodeDetectionResult>(
+                    "detectBarcode", 
+                    image.DataUrl, 
+                    image.CanvasId
+                );
+
+                if (result != null && !string.IsNullOrEmpty(result.Code))
+                {
+                    image.DetectedBarcode = result.Code;
+                    
+                    // Validate against provided barcode
+                    if (result.Code.Equals(Barcode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SuccessMessage = $"Barcode {result.Code} validated successfully in image {image.FileName}!";
+                    }
+                    else
+                    {
+                        ErrorMessage = $"Warning: Detected barcode {result.Code} doesn't match provided barcode {Barcode}";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Barcode detection failed for {image.FileName}: {ex.Message}");
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SaveProduct()
+    {
+        ErrorMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(Barcode))
+        {
+            ErrorMessage = "Barcode is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ProductData.Name))
+        {
+            ErrorMessage = "Product name is required.";
+            return;
+        }
+
+        if (UploadedImages.Count == 0)
+        {
+            ErrorMessage = "At least one product image is required.";
+            return;
+        }
+
+        IsSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            // Use first image as the product image
+            var firstImage = UploadedImages[0];
+            var base64Image = firstImage.DataUrl.Split(',')[1]; // Remove data URL prefix
+            var imageType = "jpg"; // Default to jpg
+
+            var request = new BardcodeInjestRequest
+            {
+                Bard = Barcode,
+                Source = "OCR",
+                Name = ProductData.Name,
+                Description = ProductData.Description ?? string.Empty,
+                Base64Image = base64Image,
+                ImageType = imageType,
+                WeightVolume = ProductData.WeightVolume ?? string.Empty
+            };
+
+            var result = await ApiClient.CreateItem(request);
+
+            if (result != null)
+            {
+                SuccessMessage = $"Product '{ProductData.Name}' saved successfully!";
+                
+                // Reset form
+                await Task.Delay(2000);
+                ResetForm();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error saving product: {ex.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ResetForm()
+    {
+        Barcode = string.Empty;
+        UploadedImages.Clear();
+        OcrResults.Clear();
+        ProductData = new ProductFormData();
+        ErrorMessage = string.Empty;
+        SuccessMessage = string.Empty;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsModule != null)
+        {
+            await _jsModule.DisposeAsync();
+        }
+    }
+
+    private class ImageData
+    {
+        public string DataUrl { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string CanvasId { get; set; } = string.Empty;
+        public string? DetectedBarcode { get; set; }
+    }
+
+    private class OcrResult
+    {
+        public ImageData Image { get; set; } = default!;
+        public string Text { get; set; } = string.Empty;
+    }
+
+    private class ProductFormData
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? WeightVolume { get; set; }
+    }
+
+    private class BarcodeDetectionResult
+    {
+        public string? Code { get; set; }
+        public string? Format { get; set; }
+    }
+}
