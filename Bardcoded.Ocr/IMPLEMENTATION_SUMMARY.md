@@ -50,11 +50,11 @@ This implementation provides a complete Receipt OCR pipeline using PaddleOCR and
 #### Pages
 - **Receipts.razor**: Main receipt OCR page with instructions and tips
 
-### 4. Python OCR Service (ReceiptOcr/)
+### 4. Python OCR Service (Bardcoded.Ocr/)
 
 #### Project Structure
 ```
-ReceiptOcr/
+Bardcoded.Ocr/
 ├── src/
 │   ├── models/
 │   │   ├── base.py              # Abstract model interface
@@ -172,7 +172,7 @@ python cli.py version
 
 ### 6. Documentation
 
-#### README.md (ReceiptOcr/)
+#### README.md (Bardcoded.Ocr/)
 - Overview and features
 - Setup instructions
 - Usage examples (CLI and Python API)
@@ -204,7 +204,7 @@ python cli.py version
     "ocr_engine": "paddle",
     "detection_mode": "word",
     "box_normalization_scale": 1000,
-    "python_service_path": "./ReceiptOcr/cli.py",
+    "python_service_path": "./Bardcoded.Ocr/cli.py",
     "temp_storage_path": "./temp/receipts",
     "max_file_size": 10485760,
     "temp_file_ttl_hours": 24,
@@ -214,7 +214,7 @@ python cli.py version
 }
 ```
 
-#### config.yaml (ReceiptOcr/)
+#### config.yaml (Bardcoded.Ocr/)
 ```yaml
 model:
   name_or_path: "microsoft/layoutlmv3-base"

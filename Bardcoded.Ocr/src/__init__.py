@@ -1,5 +1,5 @@
 """
-Receipt OCR Service
+Bardcoded.Ocr Service
 
 Python package for receipt OCR and structured data extraction.
 """

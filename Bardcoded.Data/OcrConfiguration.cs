@@ -41,7 +41,7 @@ namespace Bardcoded.Data
         /// Path to the Python OCR service executable
         /// </summary>
         [JsonPropertyName("python_service_path")]
-        public string PythonServicePath { get; set; } = "./ReceiptOcr/cli.py";
+        public string PythonServicePath { get; set; } = "./Bardcoded.Ocr/cli.py";
 
         /// <summary>
         /// Temporary storage path for uploaded images
