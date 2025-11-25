@@ -2,6 +2,8 @@ using Bardcoded.Data;
 using Bardcoded.Data.Messages;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace Bardcoded.ApiService.Controllers
 {
@@ -168,7 +170,7 @@ namespace Bardcoded.ApiService.Controllers
     }
 
     /// <summary>
-    /// In-memory receipt processor implementation
+    /// Receipt processor implementation that calls Python CLI
     /// </summary>
     public class ReceiptProcessor : IReceiptProcessor
     {
@@ -212,7 +214,7 @@ namespace Bardcoded.ApiService.Controllers
                 filePaths.Add(filePath);
             }
 
-            // Start background processing
+            // Start background processing on a separate thread
             _ = Task.Run(async () => await ProcessReceiptInBackgroundAsync(jobId, filePaths, request));
 
             return jobId;
@@ -227,41 +229,110 @@ namespace Bardcoded.ApiService.Controllers
                 {
                     JobId = jobId,
                     Status = "processing",
+                    Progress = 10,
+                    Message = "Preparing to run OCR"
+                };
+
+                _logger.LogInformation("Starting OCR processing for job {JobId} with {FileCount} files", jobId, filePaths.Count);
+
+                // Build arguments for Python CLI
+                var pythonPath = FindPythonExecutable();
+                var cliPath = GetCliPath();
+                
+                _logger.LogInformation("Python path: {PythonPath}", pythonPath);
+                _logger.LogInformation("CLI path: {CliPath}", cliPath);
+
+                // Build command arguments
+                var args = new List<string>
+                {
+                    cliPath,
+                    "process"
+                };
+
+                // Add image arguments
+                foreach (var filePath in filePaths)
+                {
+                    args.Add("--image");
+                    args.Add(filePath);
+                }
+
+                // Add job ID
+                args.Add("--job-id");
+                args.Add(jobId);
+
+                // Add OCR engine
+                args.Add("--ocr-engine");
+                args.Add(_config.OcrEngine);
+
+                // Add device
+                args.Add("--device");
+                args.Add(_config.EnableGpu ? "auto" : "cpu");
+
+                // Add model
+                args.Add("--model");
+                args.Add(_config.ModelNameOrPath);
+
+                _statuses[jobId] = new ReceiptStatusResponse
+                {
+                    JobId = jobId,
+                    Status = "processing",
                     Progress = 25,
                     Message = "Running OCR on receipt images"
                 };
 
-                // This is a placeholder - the actual OCR processing will be implemented
-                // when the Python service is integrated
-                await Task.Delay(2000); // Simulate processing
+                // Run Python CLI process
+                var processStartInfo = new ProcessStartInfo
+                {
+                    FileName = pythonPath,
+                    Arguments = string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a)),
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
 
-                // Create mock result for now
-                var result = new ReceiptView
+                _logger.LogInformation("Executing: {FileName} {Arguments}", processStartInfo.FileName, processStartInfo.Arguments);
+
+                using var process = new Process { StartInfo = processStartInfo };
+                process.Start();
+
+                var outputTask = process.StandardOutput.ReadToEndAsync();
+                var errorTask = process.StandardError.ReadToEndAsync();
+
+                // Wait for process with timeout (5 minutes)
+                var completed = process.WaitForExit(300000);
+
+                var output = await outputTask;
+                var error = await errorTask;
+
+                if (!completed)
+                {
+                    process.Kill();
+                    throw new TimeoutException("OCR process timed out after 5 minutes");
+                }
+
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    _logger.LogWarning("OCR process stderr: {Error}", error);
+                }
+
+                _logger.LogInformation("OCR process completed with exit code {ExitCode}", process.ExitCode);
+
+                if (process.ExitCode != 0)
+                {
+                    throw new Exception($"OCR process failed with exit code {process.ExitCode}: {error}");
+                }
+
+                _statuses[jobId] = new ReceiptStatusResponse
                 {
                     JobId = jobId,
-                    Status = "done",
-                    Pages = new List<ReceiptPage>
-                    {
-                        new ReceiptPage
-                        {
-                            PageNumber = 1,
-                            RawOcrText = "Sample receipt text",
-                            Words = new List<OcrWord>()
-                        }
-                    },
-                    VendorName = new ExtractedField
-                    {
-                        Value = "Sample Store",
-                        Confidence = 0.95,
-                        Box = new BoundingBox { X0 = 100, Y0 = 50, X1 = 300, Y1 = 100 }
-                    },
-                    TotalAmount = new ExtractedField
-                    {
-                        Value = "25.99",
-                        Confidence = 0.92,
-                        Box = new BoundingBox { X0 = 400, Y0 = 500, X1 = 500, Y1 = 550 }
-                    }
+                    Status = "processing",
+                    Progress = 75,
+                    Message = "Parsing OCR results"
                 };
+
+                // Parse JSON output
+                var result = ParseOcrResult(output, jobId);
 
                 _jobs[jobId] = result;
                 _statuses[jobId] = new ReceiptStatusResponse
@@ -273,6 +344,20 @@ namespace Bardcoded.ApiService.Controllers
                 };
 
                 _logger.LogInformation("Receipt processing completed for job {JobId}", jobId);
+
+                // Clean up temp files after successful processing
+                try
+                {
+                    var tempDir = Path.GetDirectoryName(filePaths[0]);
+                    if (tempDir != null && Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to clean up temp directory for job {JobId}", jobId);
+                }
             }
             catch (Exception ex)
             {
@@ -293,6 +378,226 @@ namespace Bardcoded.ApiService.Controllers
                     ErrorMessage = ex.Message
                 };
             }
+        }
+
+        private string FindPythonExecutable()
+        {
+            // Try common Python executable names
+            var candidates = new[] { "python3", "python", "python3.11", "python3.10" };
+            
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = candidate,
+                        Arguments = "--version",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    
+                    using var process = Process.Start(psi);
+                    if (process != null)
+                    {
+                        process.WaitForExit(5000);
+                        if (process.ExitCode == 0)
+                        {
+                            return candidate;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Continue to next candidate
+                }
+            }
+            
+            // Default to python3
+            return "python3";
+        }
+
+        private string GetCliPath()
+        {
+            // Get the CLI path from configuration
+            var cliPath = _config.PythonServicePath;
+            
+            // If relative path, resolve from current directory
+            if (!Path.IsPathRooted(cliPath))
+            {
+                cliPath = Path.Combine(Directory.GetCurrentDirectory(), cliPath);
+            }
+            
+            // Normalize path
+            cliPath = Path.GetFullPath(cliPath);
+            
+            if (!File.Exists(cliPath))
+            {
+                _logger.LogWarning("CLI path not found at {CliPath}, trying alternate locations", cliPath);
+                
+                // Try alternate locations
+                var alternates = new[]
+                {
+                    Path.Combine(Directory.GetCurrentDirectory(), "Bardcoded.Ocr", "cli.py"),
+                    Path.Combine(Directory.GetCurrentDirectory(), "..", "Bardcoded.Ocr", "cli.py"),
+                    Path.Combine(AppContext.BaseDirectory, "Bardcoded.Ocr", "cli.py"),
+                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Bardcoded.Ocr", "cli.py")
+                };
+                
+                foreach (var alt in alternates)
+                {
+                    var normalized = Path.GetFullPath(alt);
+                    if (File.Exists(normalized))
+                    {
+                        _logger.LogInformation("Found CLI at alternate location: {CliPath}", normalized);
+                        return normalized;
+                    }
+                }
+            }
+            
+            return cliPath;
+        }
+
+        private ReceiptView ParseOcrResult(string jsonOutput, string jobId)
+        {
+            try
+            {
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var jsonDoc = JsonDocument.Parse(jsonOutput);
+                var root = jsonDoc.RootElement;
+
+                var result = new ReceiptView
+                {
+                    JobId = jobId,
+                    Status = root.TryGetProperty("status", out var statusProp) ? statusProp.GetString() ?? "done" : "done",
+                    Pages = new List<ReceiptPage>(),
+                    LineItems = new List<LineItem>()
+                };
+
+                // Parse error if present
+                if (root.TryGetProperty("error", out var errorProp))
+                {
+                    result.ErrorMessage = errorProp.GetString();
+                }
+
+                // Parse pages
+                if (root.TryGetProperty("pages", out var pagesProp) && pagesProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var page in pagesProp.EnumerateArray())
+                    {
+                        var receiptPage = new ReceiptPage
+                        {
+                            PageNumber = page.TryGetProperty("page_number", out var pnProp) ? pnProp.GetInt32() : 1,
+                            RawOcrText = page.TryGetProperty("raw_ocr_text", out var rtProp) ? rtProp.GetString() ?? "" : "",
+                            Words = new List<OcrWord>()
+                        };
+
+                        if (page.TryGetProperty("words", out var wordsProp) && wordsProp.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var word in wordsProp.EnumerateArray())
+                            {
+                                var wordBox = word.TryGetProperty("box", out var boxProp) && boxProp.ValueKind == JsonValueKind.Object
+                                    ? ParseBoundingBox(boxProp) ?? new BoundingBox()
+                                    : new BoundingBox();
+
+                                var ocrWord = new OcrWord
+                                {
+                                    Text = word.TryGetProperty("text", out var textProp) ? textProp.GetString() ?? "" : "",
+                                    Box = wordBox,
+                                    Confidence = word.TryGetProperty("confidence", out var confProp) ? confProp.GetDouble() : 0
+                                };
+
+                                receiptPage.Words.Add(ocrWord);
+                            }
+                        }
+
+                        result.Pages.Add(receiptPage);
+                    }
+                }
+
+                // Parse extracted fields
+                result.VendorName = ParseExtractedField(root, "vendor_name");
+                result.MerchantAddress = ParseExtractedField(root, "merchant_address");
+                result.Date = ParseExtractedField(root, "date");
+                result.TotalAmount = ParseExtractedField(root, "total_amount");
+                result.Subtotal = ParseExtractedField(root, "subtotal");
+                result.TaxAmount = ParseExtractedField(root, "tax_amount");
+                result.Currency = ParseExtractedField(root, "currency");
+
+                // Parse line items
+                if (root.TryGetProperty("line_items", out var lineItemsProp) && lineItemsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in lineItemsProp.EnumerateArray())
+                    {
+                        var lineItem = new LineItem
+                        {
+                            Description = item.TryGetProperty("description", out var descProp) ? descProp.GetString() ?? "" : "",
+                            Quantity = item.TryGetProperty("quantity", out var qtyProp) ? (decimal?)qtyProp.GetDouble() : null,
+                            UnitPrice = item.TryGetProperty("unit_price", out var upProp) ? (decimal?)upProp.GetDouble() : null,
+                            LineTotal = item.TryGetProperty("line_total", out var ltProp) ? (decimal?)ltProp.GetDouble() : null,
+                            Confidence = item.TryGetProperty("confidence", out var cProp) ? cProp.GetDouble() : 0
+                        };
+
+                        if (item.TryGetProperty("box", out var itemBoxProp) && itemBoxProp.ValueKind == JsonValueKind.Object)
+                        {
+                            lineItem.Box = ParseBoundingBox(itemBoxProp);
+                        }
+
+                        result.LineItems.Add(lineItem);
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse OCR result JSON");
+                return new ReceiptView
+                {
+                    JobId = jobId,
+                    Status = "failed",
+                    ErrorMessage = $"Failed to parse OCR result: {ex.Message}"
+                };
+            }
+        }
+
+        private ExtractedField? ParseExtractedField(JsonElement root, string fieldName)
+        {
+            if (!root.TryGetProperty(fieldName, out var fieldProp) || fieldProp.ValueKind == JsonValueKind.Null)
+            {
+                return null;
+            }
+
+            return new ExtractedField
+            {
+                Value = fieldProp.TryGetProperty("value", out var valProp) ? valProp.GetString() ?? "" : "",
+                Confidence = fieldProp.TryGetProperty("confidence", out var confProp) ? confProp.GetDouble() : 0,
+                Box = fieldProp.TryGetProperty("box", out var boxProp) && boxProp.ValueKind == JsonValueKind.Object
+                    ? ParseBoundingBox(boxProp)
+                    : null
+            };
+        }
+
+        private BoundingBox? ParseBoundingBox(JsonElement boxElement)
+        {
+            if (boxElement.ValueKind == JsonValueKind.Null)
+            {
+                return null;
+            }
+
+            return new BoundingBox
+            {
+                X0 = boxElement.TryGetProperty("x0", out var x0Prop) ? x0Prop.GetInt32() : 0,
+                Y0 = boxElement.TryGetProperty("y0", out var y0Prop) ? y0Prop.GetInt32() : 0,
+                X1 = boxElement.TryGetProperty("x1", out var x1Prop) ? x1Prop.GetInt32() : 0,
+                Y1 = boxElement.TryGetProperty("y1", out var y1Prop) ? y1Prop.GetInt32() : 0
+            };
         }
 
         public Task<ReceiptStatusResponse?> GetStatusAsync(string jobId)
