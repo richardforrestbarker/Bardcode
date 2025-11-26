@@ -182,15 +182,71 @@ Mapping:
 
 ## Testing
 
+The test suite includes both unit tests and integration tests.
+
+### Test Categories
+
+1. **Unit Tests** (`tests/test_cli_unit.py`) - 52 tests
+   - CLI argument parsing and validation
+   - Device selection logic  
+   - Bounding box normalization
+   - Heuristic field extraction
+   - Output formatting and JSON structure
+   - Error handling
+   - Preprocessing functions
+   - These tests mock OCR/model calls and don't require full dependencies
+
+2. **Integration Tests** (`tests/test_cli_integration.py`) - 21 tests
+   - PaddleOCR text detection and recognition
+   - Tesseract OCR fallback
+   - LayoutLMv3 model loading and inference
+   - Full pipeline end-to-end processing
+   - Multi-page receipt handling
+   - These tests run the actual models and require full dependencies
+
+### Running Tests
+
 ```bash
-# Run all tests
-pytest tests/
+# Run all tests (unit tests will pass, integration tests skip if deps missing)
+python -m pytest tests/
 
-# Run with coverage
-pytest --cov=src tests/
+# Run only unit tests (no dependencies required beyond numpy, Pillow)
+python -m pytest tests/test_cli_unit.py -v
 
-# Test specific module
-pytest tests/test_receipt_processor.py
+# Run integration tests (requires paddleocr, pytesseract, transformers)
+python -m pytest tests/test_cli_integration.py -v
+
+# Run with coverage report
+python -m pytest tests/ --cov=. --cov-report=html
+
+# Run excluding slow tests (model loading)
+python -m pytest tests/ -m "not slow"
+
+# Run specific test class
+python -m pytest tests/test_cli_unit.py::TestNormalizeBoxes -v
+
+# Run specific test
+python -m pytest tests/test_cli_unit.py::TestCLIArguments::test_version_command -v
+```
+
+### Test Dependencies
+
+**Minimal (unit tests only):**
+```bash
+pip install pytest pytest-cov numpy Pillow
+```
+
+**Full (all tests including integration):**
+```bash
+pip install -r requirements.txt
+```
+
+### Test Coverage
+
+Run with coverage to see which code is tested:
+
+```bash
+python -m pytest tests/ --cov=. --cov-report=term-missing
 ```
 
 ## Development
