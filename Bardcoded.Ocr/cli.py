@@ -733,7 +733,7 @@ def main():
             sys.exit(1)
     
     elif args.command == "version":
-        print("Receipt OCR Service v0.1.0")
+        print("Receipt OCR Service v0.0.0")
         print("PaddleOCR + LayoutLMv3")
         sys.exit(0)
     
