@@ -184,6 +184,11 @@ class LayoutLMv3Model(BaseModel):
         if pil_image.mode != 'RGB':
             pil_image = pil_image.convert('RGB')
         
+        # Validate inputs
+        if not token_ids:
+            logger.warning("Empty token_ids provided to predict()")
+            return {"predictions": [], "confidences": [], "entities": {}}
+        
         # Prepare inputs using processor
         # LayoutLMv3 expects: input_ids, attention_mask, bbox, pixel_values
         
@@ -193,7 +198,7 @@ class LayoutLMv3Model(BaseModel):
             token_boxes = [token_boxes]
         
         # Pad sequences to same length
-        max_len = min(512, max(len(t) for t in token_ids))
+        max_len = min(512, max(len(t) for t in token_ids) if token_ids else 1)
         
         padded_ids = []
         padded_boxes = []

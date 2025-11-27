@@ -232,12 +232,14 @@ class FieldExtractor:
                         unit_price = line_total
                         line_total = price_value
                 # Check if it's a quantity
-                elif quantity_match := quantity_pattern.match(text):
-                    qty = quantity_match.group(1) or quantity_match.group(2)
-                    quantity = int(qty)
                 else:
-                    # Part of description
-                    description_parts.append(text)
+                    quantity_match = quantity_pattern.match(text)
+                    if quantity_match:
+                        qty = quantity_match.group(1) or quantity_match.group(2)
+                        quantity = int(qty)
+                    else:
+                        # Part of description
+                        description_parts.append(text)
             
             # Only add if we found a valid line item
             if description_parts and (line_total is not None or unit_price is not None):
