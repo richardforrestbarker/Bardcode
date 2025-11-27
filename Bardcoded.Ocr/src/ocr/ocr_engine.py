@@ -58,23 +58,34 @@ class PaddleOcrEngine(OcrEngine):
     
     def _load_ocr(self):
         """Lazy load PaddleOCR model."""
-        if self._ocr is None:
-            # TODO: Implement actual PaddleOCR loading
-            # from paddleocr import PaddleOCR
-            # self._ocr = PaddleOCR(
-            #     use_angle_cls=True,
-            #     lang=self.lang,
-            #     use_gpu=self.use_gpu,
-            #     show_log=False
-            # )
-            logger.info("PaddleOCR model loaded")
+        if self._ocr is not None:
+            return
+        
+        try:
+            from paddleocr import PaddleOCR
+            
+            self._ocr = PaddleOCR(
+                use_angle_cls=True,
+                lang=self.lang,
+                use_gpu=self.use_gpu,
+                show_log=False
+            )
+            logger.info("PaddleOCR model loaded successfully")
+            
+        except ImportError:
+            raise ImportError(
+                "PaddleOCR not installed. Install with: pip install paddleocr paddlepaddle"
+            )
+        except Exception as e:
+            logger.error(f"Failed to load PaddleOCR: {e}")
+            raise
     
     def detect_and_recognize(self, image: Any) -> List[Dict[str, Any]]:
         """
         Detect and recognize text using PaddleOCR.
         
         Args:
-            image: Input image
+            image: Input image (numpy array)
             
         Returns:
             List of words with format:
@@ -91,50 +102,60 @@ class PaddleOcrEngine(OcrEngine):
         
         logger.info("Running PaddleOCR detection and recognition")
         
-        # TODO: Implement actual OCR
-        # result = self._ocr.ocr(image, cls=True)
-        # 
-        # words = []
-        # for line in result:
-        #     for word_info in line:
-        #         box_points = word_info[0]  # 4 corner points
-        #         text = word_info[1][0]     # recognized text
-        #         confidence = word_info[1][1]  # confidence score
-        #         
-        #         # Convert 4-point box to [x0, y0, x1, y1]
-        #         x_coords = [p[0] for p in box_points]
-        #         y_coords = [p[1] for p in box_points]
-        #         box = [
-        #             min(x_coords),
-        #             min(y_coords),
-        #             max(x_coords),
-        #             max(y_coords)
-        #         ]
-        #         
-        #         words.append({
-        #             'text': text,
-        #             'box': box,
-        #             'confidence': confidence
-        #         })
-        
-        # Placeholder return
-        return [
-            {
-                'text': 'RECEIPT',
-                'box': [100, 50, 300, 100],
-                'confidence': 0.98
-            },
-            {
-                'text': 'TOTAL',
-                'box': [100, 500, 200, 550],
-                'confidence': 0.95
-            },
-            {
-                'text': '25.99',
-                'box': [400, 500, 500, 550],
-                'confidence': 0.97
-            }
-        ]
+        try:
+            # Run OCR
+            result = self._ocr.ocr(image, cls=True)
+            
+            if result is None or len(result) == 0:
+                logger.warning("PaddleOCR returned no results")
+                return []
+            
+            words = []
+            
+            # PaddleOCR returns nested list structure
+            for page_result in result:
+                if page_result is None:
+                    continue
+                    
+                for line in page_result:
+                    if line is None or len(line) < 2:
+                        continue
+                    
+                    box_points = line[0]  # 4 corner points
+                    text_info = line[1]   # (text, confidence)
+                    
+                    if isinstance(text_info, tuple) and len(text_info) >= 2:
+                        text = str(text_info[0])
+                        confidence = float(text_info[1])
+                    else:
+                        continue
+                    
+                    # Skip empty text
+                    if not text.strip():
+                        continue
+                    
+                    # Convert 4-point box to [x0, y0, x1, y1]
+                    x_coords = [p[0] for p in box_points]
+                    y_coords = [p[1] for p in box_points]
+                    box = [
+                        int(min(x_coords)),
+                        int(min(y_coords)),
+                        int(max(x_coords)),
+                        int(max(y_coords))
+                    ]
+                    
+                    words.append({
+                        'text': text,
+                        'box': box,
+                        'confidence': confidence
+                    })
+            
+            logger.info(f"PaddleOCR detected {len(words)} text regions")
+            return words
+            
+        except Exception as e:
+            logger.error(f"PaddleOCR detection failed: {e}")
+            raise
 
 
 class TesseractOcrEngine(OcrEngine):
@@ -155,53 +176,89 @@ class TesseractOcrEngine(OcrEngine):
         self.lang = lang
         self.config = config
         logger.info(f"Initialized Tesseract engine (lang={lang})")
+        
+        # Verify Tesseract is available
+        self._verify_installation()
+    
+    def _verify_installation(self):
+        """Verify Tesseract is installed."""
+        try:
+            import pytesseract
+            # Try to get version to verify installation
+            pytesseract.get_tesseract_version()
+        except ImportError:
+            raise ImportError(
+                "pytesseract not installed. Install with: pip install pytesseract"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Tesseract may not be installed properly: {e}. "
+                "Install Tesseract OCR from https://github.com/tesseract-ocr/tesseract"
+            )
     
     def detect_and_recognize(self, image: Any) -> List[Dict[str, Any]]:
         """
         Detect and recognize text using Tesseract.
         
         Args:
-            image: Input image
+            image: Input image (numpy array or PIL Image)
             
         Returns:
             List of words with boxes and text
         """
         logger.info("Running Tesseract OCR")
         
-        # TODO: Implement Tesseract OCR
-        # import pytesseract
-        # 
-        # # Get word-level data
-        # data = pytesseract.image_to_data(
-        #     image,
-        #     lang=self.lang,
-        #     config=self.config,
-        #     output_type=pytesseract.Output.DICT
-        # )
-        # 
-        # words = []
-        # for i in range(len(data['text'])):
-        #     text = data['text'][i].strip()
-        #     if not text:
-        #         continue
-        #     
-        #     box = [
-        #         data['left'][i],
-        #         data['top'][i],
-        #         data['left'][i] + data['width'][i],
-        #         data['top'][i] + data['height'][i]
-        #     ]
-        #     
-        #     confidence = data['conf'][i] / 100.0  # Tesseract returns 0-100
-        #     
-        #     words.append({
-        #         'text': text,
-        #         'box': box,
-        #         'confidence': confidence
-        #     })
-        
-        # Placeholder return
-        return []
+        try:
+            import pytesseract
+            from PIL import Image
+            import numpy as np
+            
+            # Convert numpy array to PIL Image if needed
+            if isinstance(image, np.ndarray):
+                pil_image = Image.fromarray(image)
+            else:
+                pil_image = image
+            
+            # Get word-level data
+            data = pytesseract.image_to_data(
+                pil_image,
+                lang=self.lang,
+                config=self.config,
+                output_type=pytesseract.Output.DICT
+            )
+            
+            words = []
+            
+            for i in range(len(data['text'])):
+                text = data['text'][i].strip()
+                if not text:
+                    continue
+                
+                conf = data['conf'][i]
+                
+                # Tesseract returns -1 for invalid entries
+                if conf < 0:
+                    continue
+                
+                box = [
+                    int(data['left'][i]),
+                    int(data['top'][i]),
+                    int(data['left'][i] + data['width'][i]),
+                    int(data['top'][i] + data['height'][i])
+                ]
+                
+                words.append({
+                    'text': text,
+                    'box': box,
+                    'confidence': conf / 100.0  # Tesseract returns 0-100
+                })
+            
+            logger.info(f"Tesseract detected {len(words)} words")
+            return words
+            
+        except Exception as e:
+            logger.error(f"Tesseract OCR failed: {e}")
+            raise
 
 
 def create_ocr_engine(engine_type: str = "paddle", **kwargs) -> OcrEngine:
@@ -215,9 +272,15 @@ def create_ocr_engine(engine_type: str = "paddle", **kwargs) -> OcrEngine:
     Returns:
         OcrEngine instance
     """
-    if engine_type.lower() == "paddle":
-        return PaddleOcrEngine(**kwargs)
-    elif engine_type.lower() == "tesseract":
+    engine_type = engine_type.lower()
+    
+    if engine_type == "paddle":
+        try:
+            return PaddleOcrEngine(**kwargs)
+        except ImportError:
+            logger.warning("PaddleOCR not available, falling back to Tesseract")
+            return TesseractOcrEngine()
+    elif engine_type == "tesseract":
         return TesseractOcrEngine(**kwargs)
     else:
         raise ValueError(f"Unknown OCR engine type: {engine_type}")

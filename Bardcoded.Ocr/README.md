@@ -35,14 +35,114 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Download Models
+### Installing OCR Dependencies
+
+#### PaddleOCR (Recommended - Primary OCR Engine)
+
+**On Linux/macOS:**
+```bash
+# Install PaddlePaddle (CPU)
+pip install paddlepaddle
+
+# Or with GPU support (CUDA 11.8)
+pip install paddlepaddle-gpu
+
+# Install PaddleOCR
+pip install paddleocr
+```
+
+**On Windows:**
+```bash
+# Install PaddlePaddle (CPU)
+pip install paddlepaddle
+
+# Install PaddleOCR
+pip install paddleocr
+
+# Note: GPU support on Windows requires specific CUDA version
+# See: https://www.paddlepaddle.org.cn/install/quick
+```
+
+PaddleOCR will automatically download required models on first use.
+
+#### Tesseract (Fallback OCR Engine)
+
+**On Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install tesseract-ocr tesseract-ocr-eng
+pip install pytesseract
+```
+
+**On macOS:**
+```bash
+brew install tesseract
+pip install pytesseract
+```
+
+**On Windows:**
+1. Download the installer from: https://github.com/UB-Mannheim/tesseract/wiki
+2. Run the installer and note the installation path (e.g., `C:\Program Files\Tesseract-OCR`)
+3. Add Tesseract to your PATH environment variable
+4. Install the Python wrapper:
+   ```bash
+   pip install pytesseract
+   ```
+
+### Downloading LayoutLMv3 Models
+
+The LayoutLMv3 model is automatically downloaded from HuggingFace on first use. However, you can pre-download it:
+
+**Option 1: Using HuggingFace CLI (Recommended)**
+```bash
+# Install HuggingFace Hub CLI
+pip install huggingface_hub
+
+# Download the base model
+huggingface-cli download microsoft/layoutlmv3-base --local-dir ./models/layoutlmv3-base
+
+# Or download a fine-tuned receipt model (if available)
+huggingface-cli download your-username/layoutlmv3-receipts --local-dir ./models/layoutlmv3-receipts
+```
+
+**Option 2: Using Python**
+```python
+from transformers import AutoProcessor, AutoModelForTokenClassification
+
+# Download and cache the model
+model_name = "microsoft/layoutlmv3-base"
+processor = AutoProcessor.from_pretrained(model_name)
+model = AutoModelForTokenClassification.from_pretrained(model_name)
+
+# Optionally save to local directory
+processor.save_pretrained("./models/layoutlmv3-base")
+model.save_pretrained("./models/layoutlmv3-base")
+```
+
+**Option 3: Manual Download**
+1. Visit https://huggingface.co/microsoft/layoutlmv3-base
+2. Download all files to `./models/layoutlmv3-base`
+3. Use the local path when running the CLI:
+   ```bash
+   python cli.py process --image receipt.jpg --model ./models/layoutlmv3-base
+   ```
+
+### Verifying Installation
 
 ```bash
-# Download pre-trained LayoutLMv3 model
-python src/download_models.py
+# Check all dependencies
+python -c "
+import torch
+import transformers
+import paddleocr
+print(f'PyTorch: {torch.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
+print(f'Transformers: {transformers.__version__}')
+print('PaddleOCR: OK')
+"
 
-# Or use a fine-tuned model for receipts (when available)
-python src/download_models.py --model-path path/to/finetuned/model
+# Test with version command
+python cli.py version
 ```
 
 ## Usage

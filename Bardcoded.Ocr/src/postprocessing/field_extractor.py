@@ -188,18 +188,139 @@ class FieldExtractor:
         Returns:
             List of line items with description, quantity, price, etc.
         """
-        # TODO: Implement line item extraction
-        # This is complex and typically requires:
-        # 1. Grouping words into lines
-        # 2. Identifying item descriptions (usually left-aligned)
-        # 3. Identifying quantities (often before or after description)
-        # 4. Identifying prices (usually right-aligned)
-        # 5. Matching descriptions with their prices
+        import re
+        
+        if not words:
+            return []
         
         line_items = []
         
-        # Placeholder implementation
+        # Group words into lines based on y-coordinate proximity
+        lines = self._group_words_into_lines(words)
+        
+        # Pattern for price (with or without currency symbol)
+        price_pattern = re.compile(r'^\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})?$')
+        quantity_pattern = re.compile(r'^(\d+)x?$|^x(\d+)$', re.IGNORECASE)
+        
+        for line_words in lines:
+            if len(line_words) < 2:
+                continue
+            
+            # Skip header/footer lines (typically contain keywords like TOTAL, SUBTOTAL, etc.)
+            line_text = ' '.join(w['text'] for w in line_words).lower()
+            skip_keywords = ['total', 'subtotal', 'tax', 'change', 'cash', 'credit', 
+                           'card', 'visa', 'mastercard', 'thank', 'receipt', 'store']
+            if any(kw in line_text for kw in skip_keywords):
+                continue
+            
+            # Try to identify components of a line item
+            description_parts = []
+            quantity = None
+            unit_price = None
+            line_total = None
+            
+            for w in line_words:
+                text = w['text'].strip()
+                
+                # Check if it's a price
+                if price_pattern.match(text):
+                    price_value = float(text.replace('$', '').replace(',', ''))
+                    if line_total is None:
+                        line_total = price_value
+                    elif unit_price is None:
+                        # First price was unit price, this is total
+                        unit_price = line_total
+                        line_total = price_value
+                # Check if it's a quantity
+                elif quantity_match := quantity_pattern.match(text):
+                    qty = quantity_match.group(1) or quantity_match.group(2)
+                    quantity = int(qty)
+                else:
+                    # Part of description
+                    description_parts.append(text)
+            
+            # Only add if we found a valid line item
+            if description_parts and (line_total is not None or unit_price is not None):
+                description = ' '.join(description_parts)
+                
+                # Calculate unit price if we have quantity and total
+                if unit_price is None and quantity and line_total:
+                    unit_price = round(line_total / quantity, 2)
+                elif unit_price is None:
+                    unit_price = line_total
+                
+                # Calculate line total if we only have unit price and quantity
+                if line_total is None and quantity and unit_price:
+                    line_total = round(unit_price * quantity, 2)
+                elif line_total is None:
+                    line_total = unit_price
+                
+                # Get bounding box for the entire line
+                all_boxes = [w['box'] for w in line_words]
+                combined_box = {
+                    'x0': min(b[0] for b in all_boxes),
+                    'y0': min(b[1] for b in all_boxes),
+                    'x1': max(b[2] for b in all_boxes),
+                    'y1': max(b[3] for b in all_boxes)
+                }
+                
+                # Calculate average confidence
+                avg_confidence = sum(w['confidence'] for w in line_words) / len(line_words)
+                
+                line_items.append({
+                    'description': description,
+                    'quantity': quantity or 1,
+                    'unit_price': unit_price,
+                    'line_total': line_total,
+                    'box': combined_box,
+                    'confidence': avg_confidence
+                })
+        
         return line_items
+    
+    def _group_words_into_lines(
+        self,
+        words: List[Dict[str, Any]],
+        y_threshold: int = 20
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Group words into lines based on y-coordinate proximity.
+        
+        Args:
+            words: List of words with boxes
+            y_threshold: Maximum y-distance to consider words on same line
+            
+        Returns:
+            List of word groups, each representing a line
+        """
+        if not words:
+            return []
+        
+        # Sort by y-coordinate (top), then x-coordinate (left)
+        sorted_words = sorted(words, key=lambda w: (w['box'][1], w['box'][0]))
+        
+        lines = []
+        current_line = [sorted_words[0]]
+        current_y = sorted_words[0]['box'][1]
+        
+        for word in sorted_words[1:]:
+            word_y = word['box'][1]
+            
+            # If word is on the same line (within threshold)
+            if abs(word_y - current_y) <= y_threshold:
+                current_line.append(word)
+            else:
+                # Start new line
+                # Sort current line by x-coordinate
+                lines.append(sorted(current_line, key=lambda w: w['box'][0]))
+                current_line = [word]
+                current_y = word_y
+        
+        # Add last line
+        if current_line:
+            lines.append(sorted(current_line, key=lambda w: w['box'][0]))
+        
+        return lines
     
     def verify_totals(
         self,
