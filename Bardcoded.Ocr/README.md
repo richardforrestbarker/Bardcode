@@ -2,6 +2,11 @@
 
 Python-based receipt OCR service using PaddleOCR and LayoutLMv3 for structured data extraction.
 
+## Python Requirements
+
+- **Python version must be 3.12** for all environments.
+- **Windows users:** The Ninja build system must **not** be on your PATH, or else pip will use Ninja for building wheels instead of the default backend (setuptools). This can cause build failures for some dependencies. If you encounter build errors, ensure Ninja is not present in your PATH.
+
 ## Overview
 
 This service provides OCR and structured field extraction from receipt images using:

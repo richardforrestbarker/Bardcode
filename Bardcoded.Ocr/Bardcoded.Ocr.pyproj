@@ -12,7 +12,8 @@
     <OutputPath>.</OutputPath>
     <Name>Bardcoded.Ocr</Name>
     <RootNamespace>Bardcoded.Ocr</RootNamespace>
-    <InterpreterId>MSBuild|venv|$(MSBuildProjectFullPath)</InterpreterId>
+    <InterpreterId>
+    </InterpreterId>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -59,17 +60,6 @@
     <Content Include=".gitignore" />
   </ItemGroup>
   <!-- Import Python Tools targets only when available (Visual Studio only) -->
-  <ItemGroup>
-    <Interpreter Include="venv\">
-      <Id>venv</Id>
-      <Version>3.13</Version>
-      <Description>venv (Python 3.13)</Description>
-      <InterpreterPath>Scripts\python.exe</InterpreterPath>
-      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
-      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
-      <Architecture>X64</Architecture>
-    </Interpreter>
-  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')" />
   <!-- Fallback target for non-VS builds -->
   <Target Name="Build" Condition="!Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')">

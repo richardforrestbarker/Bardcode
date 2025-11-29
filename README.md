@@ -25,6 +25,11 @@ Before building and running the project, ensure you have the following installed
 - [LibMan CLI](https://learn.microsoft.com/en-us/aspnet/core/client-side/libman/libman-cli) (for managing client-side libraries)
 - [Entity Framework Core tools](https://learn.microsoft.com/en-us/ef/core/cli/dotnet) (for database migrations)
 
+### Python Requirements for OCR (Bardcoded.Ocr)
+
+- **Python version must be 3.12** for all environments.
+- **Windows users:** The Ninja build system must **not** be on your PATH, or else pip will use Ninja for building wheels instead of the default backend (setuptools). This will cause build failures for some dependencies. If you encounter build errors, ensure Ninja is not present in your PATH. For instance, you might find it installed with Visual Studio.
+
 ### Installing LibMan CLI
 
 To install the LibMan CLI tool globally, run:

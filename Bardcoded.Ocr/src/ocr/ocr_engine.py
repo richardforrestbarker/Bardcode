@@ -66,9 +66,7 @@ class PaddleOcrEngine(OcrEngine):
             
             self._ocr = PaddleOCR(
                 use_angle_cls=True,
-                lang=self.lang,
-                use_gpu=self.use_gpu,
-                show_log=False
+                lang=self.lang
             )
             logger.info("PaddleOCR model loaded successfully")
             
@@ -104,7 +102,7 @@ class PaddleOcrEngine(OcrEngine):
         
         try:
             # Run OCR
-            result = self._ocr.ocr(image, cls=True)
+            result = self._ocr.ocr(image)
             
             if result is None or len(result) == 0:
                 logger.warning("PaddleOCR returned no results")

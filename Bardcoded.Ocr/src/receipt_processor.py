@@ -84,10 +84,17 @@ class ReceiptProcessor:
         """Get or create OCR engine."""
         if self._ocr is None:
             from .ocr.ocr_engine import create_ocr_engine
-            self._ocr = create_ocr_engine(
-                self.ocr_engine_type,
-                use_gpu=(self.device == "cuda")
-            )
+            if self.ocr_engine_type == "paddle":
+                self._ocr = create_ocr_engine(
+                    self.ocr_engine_type,
+                    lang="en",
+                    detection_mode=self.config.get('detection_mode', 'word')
+                )
+            else:
+                self._ocr = create_ocr_engine(
+                    self.ocr_engine_type,
+                    lang="eng"
+                )
         return self._ocr
     
     def _get_model(self):
@@ -501,3 +508,73 @@ class ReceiptProcessor:
             return {"value": "GBP", "confidence": 0.9, "box": None}
         
         return None
+
+# --- Standalone wrappers for CLI/test imports ---
+
+def get_device(device: str) -> str:
+    return ReceiptProcessor()._resolve_device(device)
+
+def load_image(image_path: str):
+    return ReceiptProcessor()._load_image(image_path)
+
+def preprocess_image(image, denoise=False, deskew=False):
+    import numpy as np
+    import tempfile
+    import os
+    from PIL import Image
+    if isinstance(image, str):
+        return ReceiptProcessor(config={'denoise': denoise, 'deskew': deskew}).preprocess_image(image)
+    elif isinstance(image, np.ndarray):
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            Image.fromarray(image).save(tmp.name)
+            result = ReceiptProcessor(config={'denoise': denoise, 'deskew': deskew}).preprocess_image(tmp.name)
+        os.unlink(tmp.name)
+        return result
+    else:
+        raise ValueError("Unsupported image type for preprocess_image")
+
+def normalize_boxes(words, image_width, image_height, scale=1000):
+    return ReceiptProcessor().normalize_boxes(words, image_width, image_height, scale)
+
+def extract_fields_heuristic(words):
+    proc = ReceiptProcessor()
+    return proc.postprocess_results(None, words)
+
+def run_ocr(image, ocr_engine="paddle", device="auto"):
+    """Run OCR using specified engine and device."""
+    proc = ReceiptProcessor(ocr_engine=ocr_engine, device=device)
+    return proc.run_ocr(image)
+
+
+def run_layoutlm_inference(words, image, model_name="microsoft/layoutlmv3-base", device="auto"):
+    """Run LayoutLMv3 model inference."""
+    proc = ReceiptProcessor(model_name=model_name, device=device)
+    return proc.run_model_inference(words, image)
+
+
+def process_receipt(
+    image_paths,
+    job_id=None,
+    output_path=None,
+    skip_model=False,
+    ocr_engine="paddle",
+    device="auto",
+    model_name="microsoft/layoutlmv3-base",
+    denoise=False,
+    deskew=False,
+    verbose=False
+):
+    """Process receipt images with all pipeline options."""
+    proc = ReceiptProcessor(
+        model_name=model_name,
+        ocr_engine=ocr_engine,
+        device=device,
+        config={"denoise": denoise, "deskew": deskew}
+    )
+    result = proc.process_receipt(image_paths, job_id=job_id, skip_model=skip_model)
+    if output_path:
+        import json, os
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(result, f, indent=2)
+    return result
