@@ -186,7 +186,9 @@ class ImagePreprocessor:
             
             # Find coordinates of non-white pixels
             # For receipts, text is typically darker than background
-            coords = np.column_stack(np.where(image < 200))
+            # np.where returns (rows, cols) = (y, x), but cv2.minAreaRect expects (x, y)
+            # So we reverse the order with [::-1] to get (cols, rows) = (x, y)
+            coords = np.column_stack(np.where(image < 200)[::-1])
             
             if len(coords) < 100:
                 logger.debug("Not enough text pixels for deskew detection")
