@@ -200,7 +200,8 @@ class ImagePreprocessor:
             edges = cv2.Canny(binary, 50, 150, apertureSize=3)
             
             # Morphological dilation to connect text characters into horizontal lines
-            # This helps detect text line orientation rather than individual character edges
+            # The kernel width of 30 pixels is tuned to bridge typical character spacing
+            # while the height of 1 preserves horizontal line detection sensitivity
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
             dilated = cv2.dilate(edges, kernel, iterations=1)
             
@@ -219,11 +220,14 @@ class ImagePreprocessor:
                 return image
             
             # Calculate angles of detected lines
+            # Only consider lines longer than 30 pixels to filter out noise
+            # from short edge fragments that don't represent actual text lines
+            min_line_length = 30
             angles = []
             for line in lines:
                 x1, y1, x2, y2 = line[0]
                 length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                if x2 - x1 != 0 and length > 30:  # Only consider lines of significant length
+                if x2 - x1 != 0 and length > min_line_length:
                     angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
                     # Only consider near-horizontal lines (within 30 degrees)
                     # These represent text lines on a receipt
@@ -248,9 +252,9 @@ class ImagePreprocessor:
             (h, w) = image.shape[:2]
             center = (w // 2, h // 2)
             
-            # Create rotation matrix
-            # Rotate by the detected angle to straighten the text
-            # (cv2.getRotationMatrix2D rotates counter-clockwise by positive angle)
+            # Create rotation matrix to straighten text
+            # cv2.getRotationMatrix2D(center, angle, scale) rotates the image
+            # by 'angle' degrees around the center point
             M = cv2.getRotationMatrix2D(center, angle, 1.0)
             
             # Calculate new bounding box size to avoid cutting off content
