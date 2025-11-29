@@ -173,7 +173,8 @@ class ImagePreprocessor:
         """
         Detect and correct image skew.
         
-        Uses Hough transform to detect dominant text orientation.
+        Uses adaptive thresholding and morphological operations to detect text lines,
+        then applies Hough line transform to calculate the skew angle.
         
         Args:
             image: Grayscale image
@@ -184,38 +185,91 @@ class ImagePreprocessor:
         try:
             import cv2
             
-            # Find coordinates of non-white pixels
-            # For receipts, text is typically darker than background
-            coords = np.column_stack(np.where(image < 200))
+            # Apply bilateral filter to reduce noise while preserving edges
+            filtered = cv2.bilateralFilter(image, 9, 75, 75)
             
-            if len(coords) < 100:
-                logger.debug("Not enough text pixels for deskew detection")
+            # Apply adaptive threshold to create binary image with text as foreground
+            binary = cv2.adaptiveThreshold(
+                filtered, 255, 
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                cv2.THRESH_BINARY_INV, 
+                11, 2
+            )
+            
+            # Use Canny edge detection on binary image
+            edges = cv2.Canny(binary, 50, 150, apertureSize=3)
+            
+            # Morphological dilation to connect text characters into horizontal lines
+            # The kernel width of 30 pixels is tuned to bridge typical character spacing
+            # while the height of 1 preserves horizontal line detection sensitivity
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
+            dilated = cv2.dilate(edges, kernel, iterations=1)
+            
+            # Use Hough line transform with relaxed parameters
+            lines = cv2.HoughLinesP(
+                dilated, 
+                rho=1, 
+                theta=np.pi / 180, 
+                threshold=50,       # Lower threshold to detect more lines
+                minLineLength=50,   # Shorter minimum line length
+                maxLineGap=20       # Allow larger gaps between line segments
+            )
+            
+            if lines is None or len(lines) == 0:
+                logger.debug("No lines detected for deskew")
                 return image
             
-            # Find minimum area rectangle
-            angle = cv2.minAreaRect(coords)[-1]
+            # Calculate angles of detected lines
+            # Only consider lines longer than 30 pixels to filter out noise
+            # from short edge fragments that don't represent actual text lines
+            min_line_length = 30
+            angles = []
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                if x2 - x1 != 0 and length > min_line_length:
+                    angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+                    # Only consider near-horizontal lines (within 30 degrees)
+                    # These represent text lines on a receipt
+                    if abs(angle) < 30:
+                        angles.append(angle)
             
-            # Normalize angle to [-45, 45] range
-            if angle < -45:
-                angle = -(90 + angle)
-            else:
-                angle = -angle
+            if not angles:
+                logger.debug("No near-horizontal lines found for deskew")
+                return image
+            
+            # Use median angle to be robust against outliers
+            angle = np.median(angles)
             
             # Only correct if angle is significant (> 0.5 degrees)
             if abs(angle) < 0.5:
                 logger.debug(f"Skew angle ({angle:.2f}°) too small, skipping correction")
                 return image
             
+            logger.debug(f"Detected {len(angles)} text lines, median angle: {angle:.2f}°")
+            
             # Get image dimensions
             (h, w) = image.shape[:2]
             center = (w // 2, h // 2)
             
-            # Create rotation matrix
+            # Create rotation matrix to straighten text
+            # cv2.getRotationMatrix2D(center, angle, scale) rotates the image
+            # by 'angle' degrees around the center point
             M = cv2.getRotationMatrix2D(center, angle, 1.0)
             
-            # Apply rotation
+            # Calculate new bounding box size to avoid cutting off content
+            cos_val = np.abs(np.cos(np.radians(angle)))
+            sin_val = np.abs(np.sin(np.radians(angle)))
+            new_w = int(h * sin_val + w * cos_val)
+            new_h = int(h * cos_val + w * sin_val)
+            
+            # Adjust the rotation matrix to account for the new size
+            M[0, 2] += (new_w - w) / 2
+            M[1, 2] += (new_h - h) / 2
+            
+            # Apply rotation with expanded canvas to prevent content cutoff
             rotated = cv2.warpAffine(
-                image, M, (w, h),
+                image, M, (new_w, new_h),
                 flags=cv2.INTER_CUBIC,
                 borderMode=cv2.BORDER_REPLICATE
             )
