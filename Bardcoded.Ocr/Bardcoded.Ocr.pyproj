@@ -14,6 +14,8 @@
     <RootNamespace>Bardcoded.Ocr</RootNamespace>
     <InterpreterId>
     </InterpreterId>
+    <TestFramework>Pytest</TestFramework>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -54,7 +56,6 @@
     <Content Include="requirements.txt" />
     <Content Include="Dockerfile" />
     <Content Include="README.md" />
-    <Content Include="IMPLEMENTATION_SUMMARY.md" />
     <Content Include="config\config.yaml" />
     <Content Include="docs\fine_tuning.md" />
     <Content Include=".gitignore" />

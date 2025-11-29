@@ -117,12 +117,10 @@ def get_device(device_str: str = 'auto') -> str:
         Resolved device string
     """
     if device_str == 'auto':
-        # TODO: Check for CUDA availability
-        # try:
-        #     import torch
-        #     return 'cuda' if torch.cuda.is_available() else 'cpu'
-        # except ImportError:
-        #     return 'cpu'
-        return 'cpu'  # Default to CPU for now
+        try:
+            import torch
+            return 'cuda' if torch.cuda.is_available() else 'cpu'
+        except ImportError:
+            return 'cpu'
     
     return device_str
