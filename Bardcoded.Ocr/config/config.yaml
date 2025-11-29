@@ -22,7 +22,7 @@ preprocessing:
 
 # Postprocessing
 postprocessing:
-  min_confidence: 0.5
+  min_confidence: 0.8
   verify_totals: true
 
 # Storage

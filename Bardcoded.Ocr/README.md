@@ -169,12 +169,7 @@ python cli.py process --image page1.jpg --image page2.jpg --output result.json
 Configure OCR engine and model:
 
 ```bash
-python cli.py process \
-  --image receipt.jpg \
-  --output result.json \
-  --ocr-engine paddle \
-  --model microsoft/layoutlmv3-base \
-  --device cuda
+python cli.py process --image receipt.jpg --output result.json --ocr-engine paddle --model microsoft/layoutlmv3-base --device cuda
 ```
 
 ### Python API

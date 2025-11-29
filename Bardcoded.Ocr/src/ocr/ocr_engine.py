@@ -163,17 +163,19 @@ class TesseractOcrEngine(OcrEngine):
     Used when PaddleOCR is not available or as a secondary option.
     """
     
-    def __init__(self, lang: str = "eng", config: str = "--psm 6"):
+    def __init__(self, lang: str = "eng", config: str = "--psm 6", use_gpu: bool = True):
         """
         Initialize Tesseract engine.
         
         Args:
             lang: Language code
             config: Tesseract configuration string
+            use_gpu: Whether to use GPU acceleration
         """
         self.lang = lang
         self.config = config
-        logger.info(f"Initialized Tesseract engine (lang={lang})")
+        self.use_gpu = use_gpu
+        logger.info(f"Initialized Tesseract engine (lang={lang}, use_gpu={use_gpu})")
         
         # Verify Tesseract is available
         self._verify_installation()
