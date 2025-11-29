@@ -173,7 +173,7 @@ class ImagePreprocessor:
         """
         Detect and correct image skew.
         
-        Uses Hough transform to detect dominant text orientation.
+        Uses Hough line transform to detect dominant text line orientation.
         
         Args:
             image: Grayscale image
@@ -184,24 +184,40 @@ class ImagePreprocessor:
         try:
             import cv2
             
-            # Find coordinates of non-white pixels
-            # For receipts, text is typically darker than background
-            # np.where returns (rows, cols) = (y, x), but cv2.minAreaRect expects (x, y)
-            # So we reverse the order with [::-1] to get (cols, rows) = (x, y)
-            coords = np.column_stack(np.where(image < 200)[::-1])
+            # Use Canny edge detection to find edges
+            edges = cv2.Canny(image, 50, 150, apertureSize=3)
             
-            if len(coords) < 100:
-                logger.debug("Not enough text pixels for deskew detection")
+            # Use Hough line transform to detect lines
+            lines = cv2.HoughLinesP(
+                edges, 
+                rho=1, 
+                theta=np.pi / 180, 
+                threshold=100,
+                minLineLength=100, 
+                maxLineGap=10
+            )
+            
+            if lines is None or len(lines) == 0:
+                logger.debug("No lines detected for deskew")
                 return image
             
-            # Find minimum area rectangle
-            angle = cv2.minAreaRect(coords)[-1]
+            # Calculate angles of detected lines
+            angles = []
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                if x2 - x1 != 0:  # Avoid division by zero
+                    angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+                    # Only consider near-horizontal lines (within 45 degrees of horizontal)
+                    # These represent text lines on a receipt
+                    if abs(angle) < 45:
+                        angles.append(angle)
             
-            # Normalize angle to [-45, 45] range
-            if angle < -45:
-                angle = -(90 + angle)
-            else:
-                angle = -angle
+            if not angles:
+                logger.debug("No near-horizontal lines found for deskew")
+                return image
+            
+            # Use median angle to be robust against outliers
+            angle = np.median(angles)
             
             # Only correct if angle is significant (> 0.5 degrees)
             if abs(angle) < 0.5:
@@ -212,12 +228,22 @@ class ImagePreprocessor:
             (h, w) = image.shape[:2]
             center = (w // 2, h // 2)
             
-            # Create rotation matrix
+            # Create rotation matrix - rotate by negative angle to straighten
             M = cv2.getRotationMatrix2D(center, angle, 1.0)
             
-            # Apply rotation
+            # Calculate new bounding box size to avoid cutting off content
+            cos_val = np.abs(np.cos(np.radians(angle)))
+            sin_val = np.abs(np.sin(np.radians(angle)))
+            new_w = int(h * sin_val + w * cos_val)
+            new_h = int(h * cos_val + w * sin_val)
+            
+            # Adjust the rotation matrix to account for the new size
+            M[0, 2] += (new_w - w) / 2
+            M[1, 2] += (new_h - h) / 2
+            
+            # Apply rotation with expanded canvas to prevent content cutoff
             rotated = cv2.warpAffine(
-                image, M, (w, h),
+                image, M, (new_w, new_h),
                 flags=cv2.INTER_CUBIC,
                 borderMode=cv2.BORDER_REPLICATE
             )
