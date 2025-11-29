@@ -1,5 +1,7 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Providers;
+using Bardcoded.ApiService.Controllers;
+using Bardcoded.Data;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -53,6 +55,12 @@ builder.Services.AddHostedService<RateResetService>();
 builder.Services.AddDbContext<IBarcodeDataContext, BarcodeDataContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
+
+// Configure OCR settings
+var ocrConfig = builder.Configuration.GetSection("Ocr").Get<OcrConfiguration>() ?? new OcrConfiguration();
+builder.Services.AddSingleton(ocrConfig);
+builder.Services.AddSingleton<IReceiptProcessor, ReceiptProcessor>();
+
 builder.Services.AddCors();
 
 var app = builder.Build();

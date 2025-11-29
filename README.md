@@ -25,6 +25,11 @@ Before building and running the project, ensure you have the following installed
 - [LibMan CLI](https://learn.microsoft.com/en-us/aspnet/core/client-side/libman/libman-cli) (for managing client-side libraries)
 - [Entity Framework Core tools](https://learn.microsoft.com/en-us/ef/core/cli/dotnet) (for database migrations)
 
+### Python Requirements for OCR (Bardcoded.Ocr)
+
+- **Python version must be 3.12** for all environments.
+- **Windows users:** The Ninja build system must **not** be on your PATH, or else pip will use Ninja for building wheels instead of the default backend (setuptools). This will cause build failures for some dependencies. If you encounter build errors, ensure Ninja is not present in your PATH. For instance, you might find it installed with Visual Studio.
+
 ### Installing LibMan CLI
 
 To install the LibMan CLI tool globally, run:
@@ -420,6 +425,347 @@ export Application__Integrations__2__key="your-barcodelookup-key"
 ```
 
 In this example, Open Food Facts is queried first (free and no authentication required), followed by UPC Database, and finally Barcode Lookup.
+
+## Receipt OCR Feature
+
+Bardcode includes an advanced Receipt OCR feature that uses machine learning to extract structured data from receipt images. This feature combines optical character recognition (OCR) with a layout-aware model (LayoutLMv3) to accurately identify and extract fields like vendor names, dates, amounts, and line items.
+
+### OCR Architecture
+
+The Receipt OCR system uses a hybrid architecture:
+
+1. **API Service (C#/.NET)**: Handles file uploads, job management, and orchestrates the Python OCR pipeline
+2. **Python OCR Service**: Performs actual image processing, OCR, and field extraction
+3. **GPU Acceleration**: Supports CUDA-enabled GPUs for faster processing (falls back to CPU)
+
+```
+                    ┌─────────────────────────┐
+                    │   Blazor Client         │
+                    │  (Image Upload UI)      │
+                    └───────────┬─────────────┘
+                                │ HTTP POST
+                                ▼
+                    ┌─────────────────────────┐
+                    │   .NET API Service      │
+                    │  (ReceiptsController)   │
+                    │  - File validation      │
+                    │  - Job management       │
+                    └───────────┬─────────────┘
+                                │ Background Thread
+                                │ (Process.Start)
+                                ▼
+                    ┌─────────────────────────┐
+                    │   Python OCR CLI        │
+                    │   (Bardcoded.Ocr)       │
+                    │  - Image preprocessing  │
+                    │  - PaddleOCR / Tesseract│
+                    │  - LayoutLMv3 inference │
+                    │  - Field extraction     │
+                    └─────────────────────────┘
+```
+
+### OCR Pipeline Stages
+
+1. **Image Preprocessing**
+   - Grayscale conversion
+   - Denoising (bilateral filter)
+   - Deskewing (rotation correction)
+   - Contrast enhancement (CLAHE)
+
+2. **Text Detection & OCR**
+   - PaddleOCR (primary, high accuracy)
+   - Tesseract (fallback)
+   - Word-level bounding boxes with confidence scores
+
+3. **Layout Analysis**
+   - LayoutLMv3 model for document understanding
+   - Token-to-box mapping (normalized 0-1000 scale)
+   - Visual and textual feature fusion
+
+4. **Field Extraction**
+   - Vendor name detection
+   - Date parsing (multiple formats)
+   - Amount extraction (total, subtotal, tax)
+   - Line item grouping
+   - Currency detection
+
+### Setting Up OCR
+
+#### Prerequisites
+
+1. **Python 3.10+**: Required for the OCR service
+2. **GPU Support** (optional but recommended): NVIDIA GPU with CUDA support
+
+#### Installing Python Dependencies
+
+Navigate to the OCR project directory and install dependencies:
+
+```bash
+cd Bardcoded.Ocr
+pip install -r requirements.txt
+```
+
+For GPU support on Linux:
+```bash
+pip install paddlepaddle-gpu
+```
+
+For CPU-only or macOS:
+```bash
+pip install paddlepaddle
+```
+
+#### Required System Dependencies
+
+**Tesseract OCR** (fallback engine):
+
+Ubuntu/Debian:
+```bash
+sudo apt-get install tesseract-ocr tesseract-ocr-eng
+```
+
+macOS:
+```bash
+brew install tesseract
+```
+
+Windows: Download from [Tesseract GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
+
+### Using the OCR Feature
+
+#### Via API
+
+**Upload a receipt:**
+```bash
+curl -X POST http://localhost:5000/api/receipts/upload \
+  -F "files=@receipt.jpg" \
+  -F "merchantId=store-123"
+```
+
+Response:
+```json
+{
+  "jobId": "abc123-def456",
+  "status": "processing",
+  "statusUrl": "/api/receipts/status/abc123-def456",
+  "resultUrl": "/api/receipts/result/abc123-def456"
+}
+```
+
+**Check status:**
+```bash
+curl http://localhost:5000/api/receipts/status/abc123-def456
+```
+
+**Get results:**
+```bash
+curl http://localhost:5000/api/receipts/result/abc123-def456
+```
+
+#### Via Python CLI
+
+Process a single receipt:
+```bash
+cd Bardcoded.Ocr
+python cli.py process --image receipt.jpg
+```
+
+Process with output file:
+```bash
+python cli.py process --image receipt.jpg --output result.json
+```
+
+Process with options:
+```bash
+python cli.py process \
+  --image receipt.jpg \
+  --ocr-engine paddle \
+  --device cuda \
+  --denoise \
+  --deskew \
+  --model microsoft/layoutlmv3-base
+```
+
+Process multi-page receipt:
+```bash
+python cli.py process \
+  --image page1.jpg \
+  --image page2.jpg \
+  --output result.json
+```
+
+#### CLI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--image, -i` | Path to receipt image (can specify multiple) | Required |
+| `--output, -o` | Output JSON file path | stdout |
+| `--model, -m` | LayoutLMv3 model name or path | microsoft/layoutlmv3-base |
+| `--ocr-engine` | OCR engine: `paddle` or `tesseract` | paddle |
+| `--device` | Inference device: `auto`, `cuda`, `cpu` | auto |
+| `--denoise` | Apply denoising preprocessing | false |
+| `--deskew` | Apply deskew correction | false |
+| `--job-id` | Custom job identifier | auto-generated |
+
+### OCR Output Format
+
+The OCR system returns structured JSON with the following schema:
+
+```json
+{
+  "job_id": "abc123",
+  "status": "done",
+  "pages": [
+    {
+      "page_number": 1,
+      "raw_ocr_text": "STORE NAME\n123 Main St...",
+      "words": [
+        {
+          "text": "STORE",
+          "box": { "x0": 100, "y0": 50, "x1": 200, "y1": 80 },
+          "confidence": 0.98
+        }
+      ]
+    }
+  ],
+  "vendor_name": {
+    "value": "STORE NAME",
+    "confidence": 0.95,
+    "box": { "x0": 100, "y0": 50, "x1": 300, "y1": 80 }
+  },
+  "date": {
+    "value": "2024-01-15",
+    "confidence": 0.92,
+    "box": { "x0": 400, "y0": 50, "x1": 550, "y1": 80 }
+  },
+  "total_amount": {
+    "value": "25.99",
+    "confidence": 0.96,
+    "box": { "x0": 400, "y0": 500, "x1": 500, "y1": 530 }
+  },
+  "subtotal": {
+    "value": "23.85",
+    "confidence": 0.94,
+    "box": { "x0": 400, "y0": 450, "x1": 500, "y1": 480 }
+  },
+  "tax_amount": {
+    "value": "2.14",
+    "confidence": 0.93,
+    "box": { "x0": 400, "y0": 475, "x1": 500, "y1": 505 }
+  },
+  "currency": {
+    "value": "USD",
+    "confidence": 0.90,
+    "box": null
+  },
+  "line_items": [
+    {
+      "description": "Product 1",
+      "quantity": 1.0,
+      "unit_price": 12.99,
+      "line_total": 12.99,
+      "confidence": 0.89,
+      "box": { "x0": 50, "y0": 200, "x1": 550, "y1": 230 }
+    }
+  ]
+}
+```
+
+### Bounding Box Format
+
+All bounding boxes are normalized to a 0-1000 scale for consistency with LayoutLM models:
+
+- `x0`: Left edge (0-1000)
+- `y0`: Top edge (0-1000)
+- `x1`: Right edge (0-1000)
+- `y1`: Bottom edge (0-1000)
+
+### Configuration
+
+OCR settings are configured in `Bardcoded.ApiService/appsettings.json`:
+
+```json
+{
+  "Ocr": {
+    "model_name_or_path": "microsoft/layoutlmv3-base",
+    "device": "auto",
+    "ocr_engine": "paddle",
+    "detection_mode": "word",
+    "box_normalization_scale": 1000,
+    "python_service_path": "./Bardcoded.Ocr/cli.py",
+    "temp_storage_path": "./temp/receipts",
+    "max_file_size": 10485760,
+    "temp_file_ttl_hours": 24,
+    "enable_gpu": true,
+    "min_confidence_threshold": 0.5
+  }
+}
+```
+
+### Troubleshooting OCR
+
+**No OCR results returned:**
+- Ensure Python dependencies are installed: `pip install -r Bardcoded.Ocr/requirements.txt`
+- Check that PaddleOCR or Tesseract is working: `python -c "from paddleocr import PaddleOCR; print('OK')"`
+- Verify image is readable and in supported format (JPEG, PNG)
+
+**GPU not being used:**
+- Check CUDA installation: `python -c "import torch; print(torch.cuda.is_available())"`
+- Ensure paddlepaddle-gpu is installed instead of paddlepaddle
+- Set `enable_gpu: true` in configuration
+
+**Low accuracy:**
+- Try enabling preprocessing: `--denoise --deskew`
+- Ensure image is high resolution (300 DPI recommended)
+- Use well-lit, non-blurry images
+
+**Process timeout:**
+- First run downloads models (~500MB), subsequent runs are faster
+- Increase timeout in configuration if using CPU
+
+### Building the OCR Project
+
+The OCR project is a Python project included in the Visual Studio solution:
+
+```bash
+# Install dependencies
+cd Bardcoded.Ocr
+pip install -r requirements.txt
+
+# Run tests (if available)
+python -m pytest tests/
+
+# Run directly
+python cli.py version
+python cli.py process --help
+```
+
+### OCR Project Structure
+
+```
+Bardcoded.Ocr/
+├── cli.py                    # Command-line interface
+├── requirements.txt          # Python dependencies
+├── Bardcoded.Ocr.pyproj     # Visual Studio project file
+├── Dockerfile               # Container configuration
+├── config/
+│   └── config.yaml          # Default configuration
+├── docs/
+│   └── fine_tuning.md       # Model training guide
+└── src/
+    ├── __init__.py
+    ├── config.py            # Configuration management
+    ├── receipt_processor.py # Main pipeline orchestrator
+    ├── models/
+    │   ├── base.py          # Base model interface
+    │   └── layoutlmv3.py    # LayoutLMv3 implementation
+    ├── ocr/
+    │   └── ocr_engine.py    # OCR engine abstraction
+    ├── preprocessing/
+    │   └── image_preprocessor.py
+    └── postprocessing/
+        └── field_extractor.py
+```
 
 ## License
 
