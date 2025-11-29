@@ -4,11 +4,19 @@ Debug output utilities for the Receipt OCR CLI.
 Handles saving intermediary images and visualizations during processing pipeline.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import numpy as np
+
+# Import cv2 at module level for performance
+try:
+    import cv2
+    HAS_CV2 = True
+except ImportError:
+    HAS_CV2 = False
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +66,6 @@ class DebugOutputManager:
         """
         try:
             from PIL import Image
-            import cv2
             
             # Handle different image formats
             if len(image.shape) == 2:
@@ -132,9 +139,11 @@ class DebugOutputManager:
         Returns:
             Path to saved file
         """
+        if not HAS_CV2:
+            logger.warning("cv2 not available, cannot draw OCR bounding boxes")
+            return ""
+        
         try:
-            import cv2
-            
             # Make a copy to draw on
             vis_image = image.copy()
             
@@ -151,9 +160,9 @@ class DebugOutputManager:
                 if len(box) >= 4:
                     x0, y0, x1, y1 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
                     
-                    # Color based on confidence (green = high, red = low)
+                    # Color based on confidence (green = high, red = low) in RGB format
                     color_intensity = int(confidence * 255) if isinstance(confidence, float) else 255
-                    color = (0, color_intensity, 255 - color_intensity)  # BGR to RGB
+                    color = (0, color_intensity, 255 - color_intensity)
                     
                     # Draw rectangle
                     cv2.rectangle(vis_image, (x0, y0), (x1, y1), color, 2)
@@ -189,9 +198,11 @@ class DebugOutputManager:
         Returns:
             Path to saved file
         """
+        if not HAS_CV2:
+            logger.warning("cv2 not available, cannot draw result bounding boxes")
+            return ""
+        
         try:
-            import cv2
-            
             # Make a copy to draw on
             vis_image = image.copy()
             
@@ -295,8 +306,6 @@ class DebugOutputManager:
         Returns:
             Path to summary file
         """
-        import json
-        
         try:
             # List all files in the debug directory
             debug_files = sorted([f.name for f in self.job_dir.iterdir() if f.is_file()])

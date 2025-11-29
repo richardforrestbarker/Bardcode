@@ -5,8 +5,11 @@ Includes denoising, deskewing, normalization, and other image enhancement operat
 """
 
 import logging
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    from ..cli.debug_output import DebugOutputManager
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,7 @@ class ImagePreprocessor:
         denoise: bool = True,
         deskew: bool = True,
         enhance_contrast: bool = True,
-        debug_manager: Any = None
+        debug_manager: Optional['DebugOutputManager'] = None
     ):
         """
         Initialize preprocessor.
