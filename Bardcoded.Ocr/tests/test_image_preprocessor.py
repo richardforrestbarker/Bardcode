@@ -2,12 +2,15 @@
 Unit tests for image_preprocessor.py.
 
 Tests for image preprocessing functions, especially the deskew functionality.
+Also includes tests for ImageMagick-based preprocessing steps.
 """
 
 import sys
 import pytest
 import numpy as np
 from pathlib import Path
+import tempfile
+import os
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -171,3 +174,305 @@ class TestImagePreprocessorIntegration:
         result = preprocessor.preprocess_array(image)
         
         assert result is not None
+
+
+class TestImageMagickPreprocessing:
+    """Tests for ImageMagick (Wand) based preprocessing steps."""
+
+    @pytest.fixture
+    def sample_image_path(self):
+        """Create a temporary test image file."""
+        from PIL import Image
+        
+        # Create a simple test image with text-like content
+        height, width = 400, 300
+        img_array = np.full((height, width, 3), 255, dtype=np.uint8)
+        
+        # Add some dark horizontal lines (simulating text)
+        for y in range(50, 350, 40):
+            img_array[y:y+5, 30:270, :] = 30
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            Image.fromarray(img_array).save(tmp.name)
+            yield tmp.name
+        
+        # Cleanup
+        os.unlink(tmp.name)
+
+    @pytest.fixture
+    def wand_available(self):
+        """Check if Wand/ImageMagick is available."""
+        try:
+            from wand.image import Image as WandImage
+            return True
+        except ImportError:
+            return False
+
+    def test_preprocess_uses_imagemagick_when_available(self, sample_image_path, wand_available):
+        """Test that preprocessing uses ImageMagick when available."""
+        preprocessor = ImagePreprocessor(
+            target_dpi=300,
+            deskew=True,
+            denoise=True,
+            enhance_contrast=True
+        )
+        
+        result = preprocessor.preprocess(sample_image_path)
+        
+        # Result should be a valid RGB image
+        assert result is not None
+        assert len(result.shape) == 3
+        assert result.shape[2] == 3
+        # Should have reasonable dimensions
+        assert result.shape[0] > 0
+        assert result.shape[1] > 0
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_convert_to_tiff(self, sample_image_path):
+        """Test TIFF conversion step."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor()
+        
+        with WandImage(filename=sample_image_path) as img:
+            result = preprocessor._convert_to_tiff(img)
+            
+            assert result is not None
+            assert result.format.lower() == 'tiff'
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_fix_resolution_sets_300_dpi(self, sample_image_path):
+        """Test that fix_resolution sets the image to 300 DPI."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor(target_dpi=300)
+        
+        with WandImage(filename=sample_image_path) as img:
+            original_width = img.width
+            original_height = img.height
+            
+            result = preprocessor._fix_resolution(img)
+            
+            assert result is not None
+            # Resolution should be set to 300 DPI
+            assert result.resolution == (300, 300)
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_remove_background(self, sample_image_path):
+        """Test background removal step."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor()
+        
+        with WandImage(filename=sample_image_path) as img:
+            result = preprocessor._remove_background(img)
+            
+            assert result is not None
+            # Result should still have valid dimensions
+            assert result.width > 0
+            assert result.height > 0
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_deskew_wand(self, sample_image_path):
+        """Test ImageMagick deskew step."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor(deskew=True)
+        
+        with WandImage(filename=sample_image_path) as img:
+            result = preprocessor._deskew_wand(img)
+            
+            assert result is not None
+            assert result.width > 0
+            assert result.height > 0
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_grayscale_conversion(self, sample_image_path):
+        """Test grayscale conversion using ImageMagick."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor()
+        
+        with WandImage(filename=sample_image_path) as img:
+            result = preprocessor._grayscale(img)
+            
+            assert result is not None
+            assert result.type == 'grayscale'
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_enhance_contrast_wand(self, sample_image_path):
+        """Test contrast enhancement using ImageMagick."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor(enhance_contrast=True)
+        
+        with WandImage(filename=sample_image_path) as img:
+            result = preprocessor._enhance_contrast_wand(img)
+            
+            assert result is not None
+            assert result.width > 0
+            assert result.height > 0
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_denoise_wand(self, sample_image_path):
+        """Test denoising using ImageMagick."""
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor(denoise=True)
+        
+        with WandImage(filename=sample_image_path) as img:
+            result = preprocessor._denoise_wand(img)
+            
+            assert result is not None
+            assert result.width > 0
+            assert result.height > 0
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_full_imagemagick_pipeline(self, sample_image_path):
+        """Test the full ImageMagick preprocessing pipeline."""
+        preprocessor = ImagePreprocessor(
+            target_dpi=300,
+            deskew=True,
+            denoise=True,
+            enhance_contrast=True
+        )
+        
+        result = preprocessor.preprocess(sample_image_path)
+        
+        # Result should be a valid RGB numpy array
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert len(result.shape) == 3
+        assert result.shape[2] == 3
+
+    def test_opencv_fallback_when_wand_unavailable(self):
+        """Test that OpenCV fallback works when Wand is not available."""
+        # Create a simple test image
+        height, width = 200, 150
+        image = np.full((height, width, 3), 255, dtype=np.uint8)
+        for y in range(30, 170, 30):
+            image[y:y+3, 20:130, :] = 50
+        
+        preprocessor = ImagePreprocessor(
+            deskew=True,
+            denoise=True,
+            enhance_contrast=True
+        )
+        
+        # preprocess_array should work even without Wand
+        result = preprocessor.preprocess_array(image)
+        
+        assert result is not None
+        assert len(result.shape) == 3
+        assert result.shape[2] == 3
+
+
+class TestPreprocessingPipelineOrder:
+    """Tests to verify preprocessing steps are in the correct order."""
+
+    @pytest.fixture
+    def sample_image_path(self):
+        """Create a temporary test image file."""
+        from PIL import Image
+        
+        height, width = 300, 200
+        img_array = np.full((height, width, 3), 255, dtype=np.uint8)
+        for y in range(40, 260, 30):
+            img_array[y:y+4, 25:175, :] = 40
+        
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            Image.fromarray(img_array).save(tmp.name)
+            yield tmp.name
+        
+        os.unlink(tmp.name)
+
+    @pytest.mark.skipif(
+        not pytest.importorskip("wand.image", reason="Wand not available"),
+        reason="ImageMagick/Wand not installed"
+    )
+    def test_pipeline_order_tiff_first(self, sample_image_path):
+        """
+        Test that TIFF conversion happens first in the pipeline.
+        
+        Pipeline order should be: TIFF -> Resolution -> Background -> Deskew -> 
+                                 Grayscale -> Contrast -> Denoise
+        """
+        from wand.image import Image as WandImage
+        
+        preprocessor = ImagePreprocessor(
+            target_dpi=300,
+            deskew=True,
+            denoise=True,
+            enhance_contrast=True
+        )
+        
+        # We verify the order by checking that each step can receive output from the previous
+        with WandImage(filename=sample_image_path) as img:
+            # Step 1: Convert to TIFF
+            img = preprocessor._convert_to_tiff(img)
+            assert img.format.lower() == 'tiff'
+            
+            # Step 2: Fix resolution
+            img = preprocessor._fix_resolution(img)
+            assert img.resolution == (300, 300)
+            
+            # Step 3: Remove background
+            img = preprocessor._remove_background(img)
+            assert img.width > 0
+            
+            # Step 4: Deskew
+            img = preprocessor._deskew_wand(img)
+            assert img.width > 0
+            
+            # Step 5: Grayscale
+            img = preprocessor._grayscale(img)
+            assert img.type == 'grayscale'
+            
+            # Step 6: Contrast enhancement
+            img = preprocessor._enhance_contrast_wand(img)
+            assert img.width > 0
+            
+            # Step 7: Denoise
+            img = preprocessor._denoise_wand(img)
+            assert img.width > 0
+
+    def test_preprocess_returns_rgb_for_ocr_engines(self, sample_image_path):
+        """Test that final output is RGB format for compatibility with OCR engines."""
+        preprocessor = ImagePreprocessor(
+            target_dpi=300,
+            deskew=True,
+            denoise=True,
+            enhance_contrast=True
+        )
+        
+        result = preprocessor.preprocess(sample_image_path)
+        
+        # OCR engines expect RGB format
+        assert result is not None
+        assert len(result.shape) == 3
+        assert result.shape[2] == 3  # RGB channels

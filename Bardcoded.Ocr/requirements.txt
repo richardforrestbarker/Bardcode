@@ -32,6 +32,7 @@ pydantic>=2.0.0
 
 # Image preprocessing
 scipy>=1.11.0
+Wand>=0.6.0  # ImageMagick Python bindings for image preprocessing
 
 # Testing
 pytest>=7.4.0

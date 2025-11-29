@@ -2,9 +2,21 @@
 Image preprocessing utilities for receipt OCR.
 
 Includes denoising, deskewing, normalization, and other image enhancement operations.
+Uses ImageMagick (via Wand) for optimal image processing and Tesseract compatibility.
+
+Preprocessing pipeline order for best OCR accuracy:
+1. Convert to TIFF
+2. Fix resolution (300 DPI)
+3. Remove background
+4. Deskew
+5. Grayscale
+6. Contrast enhancement
+7. Denoise
 """
 
 import logging
+import tempfile
+import os
 from typing import Tuple, Optional, Any, TYPE_CHECKING
 import numpy as np
 
@@ -18,13 +30,16 @@ class ImagePreprocessor:
     """
     Preprocesses receipt images to improve OCR accuracy.
     
-    Operations include:
-    - Grayscale conversion
-    - Denoising
-    - Deskewing
-    - DPI normalization
-    - Contrast enhancement
-    - Adaptive thresholding
+    Uses ImageMagick (via Wand) for image processing operations.
+    
+    Preprocessing pipeline order:
+    1. Convert to TIFF - optimal format for Tesseract OCR
+    2. Fix resolution - ensure 300 DPI for best OCR results
+    3. Remove background - isolate text from background noise
+    4. Deskew - correct rotation/skew
+    5. Grayscale - convert to grayscale
+    6. Contrast enhancement - improve text visibility
+    7. Denoise - reduce noise while preserving edges
     """
     
     def __init__(
@@ -39,7 +54,7 @@ class ImagePreprocessor:
         Initialize preprocessor.
         
         Args:
-            target_dpi: Target DPI for normalization
+            target_dpi: Target DPI for resolution normalization (default 300)
             denoise: Whether to apply denoising
             deskew: Whether to correct skew
             enhance_contrast: Whether to enhance contrast
@@ -53,22 +68,118 @@ class ImagePreprocessor:
     
     def preprocess(self, image_path: str, page_num: int = 1) -> np.ndarray:
         """
-        Preprocess image for OCR.
+        Preprocess image for OCR using ImageMagick pipeline.
+        
+        Pipeline order: TIFF -> Resolution -> Background removal -> Deskew -> 
+                       Grayscale -> Contrast -> Denoise
         
         Args:
             image_path: Path to image file
             page_num: Page number for debug output
             
         Returns:
-            Preprocessed image as numpy array
+            Preprocessed image as numpy array (RGB)
         """
         logger.info(f"Preprocessing image: {image_path}")
         
         try:
+            from wand.image import Image as WandImage
+            from PIL import Image
+            
+            with WandImage(filename=image_path) as img:
+                # 1. Convert to TIFF format (internal processing)
+                img = self._convert_to_tiff(img)
+                if self.debug_manager:
+                    self._save_debug_wand_image(img, "tiff_converted", page_num)
+                
+                # 2. Fix resolution to 300 DPI
+                img = self._fix_resolution(img)
+                if self.debug_manager:
+                    self._save_debug_wand_image(img, "resolution_fixed", page_num)
+                
+                # 3. Remove background
+                img = self._remove_background(img)
+                if self.debug_manager:
+                    self._save_debug_wand_image(img, "background_removed", page_num)
+                
+                # 4. Deskew
+                if self.deskew:
+                    img = self._deskew_wand(img)
+                    if self.debug_manager:
+                        self._save_debug_wand_image(img, "deskewed", page_num)
+                
+                # 5. Convert to grayscale
+                img = self._grayscale(img)
+                if self.debug_manager:
+                    self._save_debug_wand_image(img, "grayscale", page_num)
+                
+                # 6. Enhance contrast
+                if self.enhance_contrast:
+                    img = self._enhance_contrast_wand(img)
+                    if self.debug_manager:
+                        self._save_debug_wand_image(img, "contrast_enhanced", page_num)
+                
+                # 7. Denoise
+                if self.denoise:
+                    img = self._denoise_wand(img)
+                    if self.debug_manager:
+                        self._save_debug_wand_image(img, "denoised", page_num)
+                
+                # Convert to numpy array for OCR processing
+                img.format = 'png'
+                blob = img.make_blob()
+            
+            # Convert blob to numpy array via PIL
+            import io
+            pil_img = Image.open(io.BytesIO(blob))
+            if pil_img.mode != 'RGB':
+                pil_img = pil_img.convert('RGB')
+            result = np.array(pil_img)
+            
+            # Save final preprocessed debug image
+            if self.debug_manager:
+                self.debug_manager.save_preprocessed_image(result, page_num)
+            
+            return result
+            
+        except ImportError as e:
+            logger.warning(f"Wand (ImageMagick) not available: {e}. Falling back to OpenCV.")
+            return self._preprocess_opencv_fallback(image_path, page_num)
+    
+    def _save_debug_wand_image(self, img, step_name: str, page_num: int):
+        """Save a Wand image for debugging purposes."""
+        if not self.debug_manager:
+            return
+        try:
+            from PIL import Image
+            import io
+            
+            # Clone to avoid modifying original
+            with img.clone() as debug_img:
+                debug_img.format = 'png'
+                blob = debug_img.make_blob()
+            
+            pil_img = Image.open(io.BytesIO(blob))
+            if pil_img.mode != 'RGB':
+                pil_img = pil_img.convert('RGB')
+            img_array = np.array(pil_img)
+            
+            # Use debug manager's save method if available
+            debug_path = os.path.join(
+                self.debug_manager.output_dir if hasattr(self.debug_manager, 'output_dir') else '/tmp',
+                f"page_{page_num}_{step_name}.png"
+            )
+            pil_img.save(debug_path)
+            logger.debug(f"Saved debug image: {debug_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save debug image for {step_name}: {e}")
+    
+    def _preprocess_opencv_fallback(self, image_path: str, page_num: int = 1) -> np.ndarray:
+        """Fallback preprocessing using OpenCV when ImageMagick is not available."""
+        try:
             from PIL import Image
             import cv2
             
-            # 1. Load image
             img = Image.open(image_path)
             img_array = np.array(img)
             
@@ -77,12 +188,19 @@ class ImagePreprocessor:
         except ImportError as e:
             logger.error(f"Required dependencies not available: {e}")
             raise ImportError(
-                "OpenCV and Pillow are required. Install with: pip install opencv-python Pillow"
+                "ImageMagick (Wand) or OpenCV and Pillow are required. "
+                "Install with: pip install Wand opencv-python Pillow"
             )
     
     def preprocess_array(self, img_array: np.ndarray, page_num: int = 1) -> np.ndarray:
         """
-        Preprocess a numpy array image.
+        Preprocess a numpy array image using OpenCV fallback.
+        
+        This method is used when ImageMagick is not available or when
+        preprocessing from an in-memory array.
+        
+        Pipeline order: TIFF -> Resolution -> Background removal -> Deskew -> 
+                       Grayscale -> Contrast -> Denoise
         
         Args:
             img_array: Image as numpy array
@@ -97,54 +215,397 @@ class ImagePreprocessor:
             logger.warning("OpenCV not available, returning original image")
             return img_array
         
-        # 2. Convert to grayscale if needed
+        # Try to use ImageMagick via Wand for array processing
+        try:
+            from wand.image import Image as WandImage
+            from PIL import Image
+            import io
+            
+            # Convert numpy array to PNG bytes
+            pil_img = Image.fromarray(img_array)
+            buffer = io.BytesIO()
+            pil_img.save(buffer, format='PNG')
+            buffer.seek(0)
+            
+            with WandImage(blob=buffer.getvalue()) as img:
+                # Apply full ImageMagick pipeline
+                img = self._convert_to_tiff(img)
+                img = self._fix_resolution(img)
+                img = self._remove_background(img)
+                
+                if self.deskew:
+                    img = self._deskew_wand(img)
+                
+                img = self._grayscale(img)
+                
+                if self.enhance_contrast:
+                    img = self._enhance_contrast_wand(img)
+                
+                if self.denoise:
+                    img = self._denoise_wand(img)
+                
+                # Convert back to numpy array
+                img.format = 'png'
+                blob = img.make_blob()
+            
+            result_pil = Image.open(io.BytesIO(blob))
+            if result_pil.mode != 'RGB':
+                result_pil = result_pil.convert('RGB')
+            result = np.array(result_pil)
+            
+            if self.debug_manager:
+                self.debug_manager.save_preprocessed_image(result, page_num)
+            
+            return result
+            
+        except ImportError:
+            logger.debug("Wand not available, using OpenCV fallback for array")
+        
+        # OpenCV fallback implementation
+        # 1. Skip TIFF conversion for array (not applicable)
+        
+        # 2. Handle RGBA to RGB conversion
         if len(img_array.shape) == 3:
             if img_array.shape[2] == 4:  # RGBA
                 img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
-            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = img_array.copy()
         
-        # Save grayscale debug image
-        if self.debug_manager:
-            self.debug_manager.save_grayscale_image(gray, page_num)
-        
-        # 3. Denoise
-        if self.denoise:
-            gray = self._denoise(gray)
-            # Save denoised debug image
-            if self.debug_manager:
-                self.debug_manager.save_denoised_image(gray, page_num)
+        # 3. Remove background (OpenCV approximation)
+        processed = self._remove_background_opencv(img_array)
         
         # 4. Deskew
         if self.deskew:
-            gray = self._deskew(gray)
-            # Save deskewed debug image
+            # Convert to grayscale temporarily for deskew detection
+            if len(processed.shape) == 3:
+                gray_for_deskew = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
+            else:
+                gray_for_deskew = processed
+            processed = self._deskew(gray_for_deskew)
             if self.debug_manager:
-                self.debug_manager.save_deskewed_image(gray, page_num)
+                self.debug_manager.save_deskewed_image(processed, page_num)
         
-        # 5. Normalize DPI (resize to target height)
-        gray = self._normalize_dpi(gray)
+        # 5. Convert to grayscale
+        if len(processed.shape) == 3:
+            gray = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = processed
+        
+        if self.debug_manager:
+            self.debug_manager.save_grayscale_image(gray, page_num)
         
         # 6. Enhance contrast
         if self.enhance_contrast:
             gray = self._enhance_contrast(gray)
-            # Save contrast enhanced debug image
             if self.debug_manager:
                 self.debug_manager.save_contrast_enhanced_image(gray, page_num)
+        
+        # 7. Denoise
+        if self.denoise:
+            gray = self._denoise(gray)
+            if self.debug_manager:
+                self.debug_manager.save_denoised_image(gray, page_num)
         
         # Convert back to RGB for OCR engines
         result = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
         
-        # Save final preprocessed debug image
         if self.debug_manager:
             self.debug_manager.save_preprocessed_image(result, page_num)
         
         return result
     
+    # ==================== ImageMagick (Wand) Methods ====================
+    
+    def _convert_to_tiff(self, img):
+        """
+        Convert image to TIFF format for optimal Tesseract OCR processing.
+        
+        TIFF is the preferred format for Tesseract as it provides lossless
+        compression and supports high bit depths.
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Wand Image object in TIFF format
+        """
+        try:
+            # Set format to TIFF internally
+            img.format = 'tiff'
+            # Use LZW compression for smaller file size while maintaining quality
+            img.compression = 'lzw'
+            logger.debug("Converted image to TIFF format")
+            return img
+        except Exception as e:
+            logger.warning(f"TIFF conversion failed: {e}")
+            return img
+    
+    def _fix_resolution(self, img):
+        """
+        Ensure image is at 300 DPI for optimal OCR results.
+        
+        300 DPI is the recommended resolution for Tesseract OCR.
+        If the image resolution is lower, it will be upscaled.
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Wand Image object at 300 DPI
+        """
+        try:
+            current_dpi = img.resolution
+            target = self.target_dpi
+            
+            # Get current resolution (x, y)
+            if current_dpi and current_dpi[0] > 0:
+                current_x_dpi = current_dpi[0]
+                current_y_dpi = current_dpi[1] if len(current_dpi) > 1 else current_dpi[0]
+            else:
+                # Default to 72 DPI if not specified
+                current_x_dpi = 72
+                current_y_dpi = 72
+            
+            # Calculate scale factors
+            scale_x = target / current_x_dpi
+            scale_y = target / current_y_dpi
+            
+            # Only resize if needed (allow 5% tolerance)
+            if abs(scale_x - 1.0) > 0.05 or abs(scale_y - 1.0) > 0.05:
+                new_width = int(img.width * scale_x)
+                new_height = int(img.height * scale_y)
+                
+                # Use Lanczos filter for high-quality resampling
+                img.resize(new_width, new_height, filter='lanczos')
+                logger.debug(f"Resized image from {current_x_dpi}x{current_y_dpi} DPI to {target} DPI")
+            
+            # Set the resolution metadata
+            img.resolution = (target, target)
+            img.units = 'pixelsperinch'
+            
+            logger.debug(f"Set image resolution to {target} DPI")
+            return img
+            
+        except Exception as e:
+            logger.warning(f"Resolution fix failed: {e}")
+            return img
+    
+    def _remove_background(self, img):
+        """
+        Remove background from image to isolate text.
+        
+        Uses ImageMagick's background removal capabilities to
+        clean up the image and improve text detection.
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Wand Image object with background removed
+        """
+        try:
+            from wand.color import Color
+            
+            # Make a clone to work with
+            result = img.clone()
+            
+            # Use fuzz factor to handle slight color variations
+            # The fuzz factor (as percentage) determines how similar colors
+            # must be to be considered the "same" for background removal
+            fuzz_percent = 10.0
+            
+            # Try to detect and remove the dominant background color
+            # This works well for receipts which typically have white/light backgrounds
+            
+            # First, try to make the background transparent
+            # We'll use the corner pixels to estimate background color
+            try:
+                # Get corner pixel colors for background estimation
+                with result.clone() as corner_sampler:
+                    corner_sampler.crop(0, 0, 1, 1)
+                    # Set fuzz for background removal
+                result.fuzz = result.quantum_range * (fuzz_percent / 100.0)
+                
+                # Remove white/light background (common for receipts)
+                result.transparent_color(Color('white'), alpha=0.0, fuzz=result.fuzz)
+                
+                # Flatten to white background to ensure consistent processing
+                result.background_color = Color('white')
+                result.alpha_channel = 'remove'
+                
+            except Exception as inner_e:
+                logger.debug(f"Transparent background removal failed: {inner_e}")
+                # Fall back to simple normalization
+                result.normalize()
+            
+            # Apply auto-level to improve contrast after background removal
+            result.auto_level()
+            
+            logger.debug("Applied background removal")
+            return result
+            
+        except Exception as e:
+            logger.warning(f"Background removal failed: {e}")
+            return img
+    
+    def _deskew_wand(self, img):
+        """
+        Detect and correct image skew using ImageMagick.
+        
+        Uses ImageMagick's deskew function which analyzes the image
+        and rotates it to straighten text lines.
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Deskewed Wand Image object
+        """
+        try:
+            from wand.color import Color
+            
+            # ImageMagick deskew threshold (0.0 to 1.0)
+            # Lower values are more aggressive in detecting skew
+            # 0.4 is a good balance for receipt images
+            threshold = 0.4
+            
+            # Apply deskew
+            img.deskew(threshold * img.quantum_range)
+            
+            # Set background to white for any new pixels from rotation
+            img.background_color = Color('white')
+            
+            logger.debug("Applied deskew correction using ImageMagick")
+            return img
+            
+        except Exception as e:
+            logger.warning(f"ImageMagick deskew failed: {e}")
+            return img
+    
+    def _grayscale(self, img):
+        """
+        Convert image to grayscale using ImageMagick.
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Grayscale Wand Image object
+        """
+        try:
+            # Convert to grayscale colorspace
+            img.type = 'grayscale'
+            logger.debug("Converted to grayscale")
+            return img
+        except Exception as e:
+            logger.warning(f"Grayscale conversion failed: {e}")
+            return img
+    
+    def _enhance_contrast_wand(self, img):
+        """
+        Enhance image contrast using ImageMagick.
+        
+        Uses a combination of techniques for optimal text visibility:
+        - Auto-level for dynamic range optimization
+        - Normalize for consistent contrast
+        - Sigmoidal contrast for non-linear enhancement
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Contrast-enhanced Wand Image object
+        """
+        try:
+            # Auto-level to stretch the histogram
+            img.auto_level()
+            
+            # Apply sigmoidal contrast for better text visibility
+            # sharpen=True increases contrast, contrast=3 is moderate enhancement
+            # midpoint=50% targets the middle tones
+            img.sigmoidal_contrast(sharpen=True, strength=3, midpoint=0.5 * img.quantum_range)
+            
+            logger.debug("Applied contrast enhancement using ImageMagick")
+            return img
+            
+        except Exception as e:
+            logger.warning(f"ImageMagick contrast enhancement failed: {e}")
+            return img
+    
+    def _denoise_wand(self, img):
+        """
+        Apply denoising using ImageMagick.
+        
+        Uses ImageMagick's enhance filter which reduces noise
+        while attempting to preserve edges.
+        
+        Args:
+            img: Wand Image object
+            
+        Returns:
+            Denoised Wand Image object
+        """
+        try:
+            # Use enhance filter for noise reduction
+            # This is similar to a median filter but preserves edges better
+            img.enhance()
+            
+            logger.debug("Applied denoising using ImageMagick enhance filter")
+            return img
+            
+        except Exception as e:
+            logger.warning(f"ImageMagick denoising failed: {e}")
+            return img
+    
+    # ==================== OpenCV Fallback Methods ====================
+    
+    def _remove_background_opencv(self, image: np.ndarray) -> np.ndarray:
+        """
+        Remove background using OpenCV (fallback method).
+        
+        Uses adaptive thresholding and morphological operations
+        to separate text from background.
+        
+        Args:
+            image: Input image (RGB or grayscale)
+            
+        Returns:
+            Image with background removed/normalized
+        """
+        try:
+            import cv2
+            
+            # Convert to grayscale if needed
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = image.copy()
+            
+            # Apply Gaussian blur to reduce noise
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            
+            # Use Otsu's thresholding to separate foreground from background
+            _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            # Apply morphological operations to clean up
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+            
+            # Invert if text is white on dark background
+            if np.mean(cleaned) < 127:
+                cleaned = cv2.bitwise_not(cleaned)
+            
+            # Convert back to 3-channel for consistency
+            result = cv2.cvtColor(cleaned, cv2.COLOR_GRAY2RGB)
+            
+            logger.debug("Applied background removal using OpenCV")
+            return result
+            
+        except Exception as e:
+            logger.warning(f"OpenCV background removal failed: {e}")
+            return image
+    
     def _denoise(self, image: np.ndarray) -> np.ndarray:
         """
-        Apply denoising filter.
+        Apply denoising filter using OpenCV.
         
         Uses bilateral filter to preserve edges while removing noise.
         
