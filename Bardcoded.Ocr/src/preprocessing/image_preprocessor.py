@@ -5,8 +5,11 @@ Includes denoising, deskewing, normalization, and other image enhancement operat
 """
 
 import logging
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    from ..cli.debug_output import DebugOutputManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,8 @@ class ImagePreprocessor:
         target_dpi: int = 300,
         denoise: bool = True,
         deskew: bool = True,
-        enhance_contrast: bool = True
+        enhance_contrast: bool = True,
+        debug_manager: Optional['DebugOutputManager'] = None
     ):
         """
         Initialize preprocessor.
@@ -39,18 +43,21 @@ class ImagePreprocessor:
             denoise: Whether to apply denoising
             deskew: Whether to correct skew
             enhance_contrast: Whether to enhance contrast
+            debug_manager: Optional DebugOutputManager for saving intermediate steps
         """
         self.target_dpi = target_dpi
         self.denoise = denoise
         self.deskew = deskew
         self.enhance_contrast = enhance_contrast
+        self.debug_manager = debug_manager
     
-    def preprocess(self, image_path: str) -> np.ndarray:
+    def preprocess(self, image_path: str, page_num: int = 1) -> np.ndarray:
         """
         Preprocess image for OCR.
         
         Args:
             image_path: Path to image file
+            page_num: Page number for debug output
             
         Returns:
             Preprocessed image as numpy array
@@ -65,7 +72,7 @@ class ImagePreprocessor:
             img = Image.open(image_path)
             img_array = np.array(img)
             
-            return self.preprocess_array(img_array)
+            return self.preprocess_array(img_array, page_num=page_num)
             
         except ImportError as e:
             logger.error(f"Required dependencies not available: {e}")
@@ -73,12 +80,13 @@ class ImagePreprocessor:
                 "OpenCV and Pillow are required. Install with: pip install opencv-python Pillow"
             )
     
-    def preprocess_array(self, img_array: np.ndarray) -> np.ndarray:
+    def preprocess_array(self, img_array: np.ndarray, page_num: int = 1) -> np.ndarray:
         """
         Preprocess a numpy array image.
         
         Args:
             img_array: Image as numpy array
+            page_num: Page number for debug output
             
         Returns:
             Preprocessed image as numpy array (RGB)
@@ -97,13 +105,23 @@ class ImagePreprocessor:
         else:
             gray = img_array.copy()
         
+        # Save grayscale debug image
+        if self.debug_manager:
+            self.debug_manager.save_grayscale_image(gray, page_num)
+        
         # 3. Denoise
         if self.denoise:
             gray = self._denoise(gray)
+            # Save denoised debug image
+            if self.debug_manager:
+                self.debug_manager.save_denoised_image(gray, page_num)
         
         # 4. Deskew
         if self.deskew:
             gray = self._deskew(gray)
+            # Save deskewed debug image
+            if self.debug_manager:
+                self.debug_manager.save_deskewed_image(gray, page_num)
         
         # 5. Normalize DPI (resize to target height)
         gray = self._normalize_dpi(gray)
@@ -111,9 +129,18 @@ class ImagePreprocessor:
         # 6. Enhance contrast
         if self.enhance_contrast:
             gray = self._enhance_contrast(gray)
+            # Save contrast enhanced debug image
+            if self.debug_manager:
+                self.debug_manager.save_contrast_enhanced_image(gray, page_num)
         
         # Convert back to RGB for OCR engines
-        return cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+        result = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+        
+        # Save final preprocessed debug image
+        if self.debug_manager:
+            self.debug_manager.save_preprocessed_image(result, page_num)
+        
+        return result
     
     def _denoise(self, image: np.ndarray) -> np.ndarray:
         """

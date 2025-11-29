@@ -55,7 +55,9 @@ def main():
                 deskew=args.deskew,
                 job_id=args.job_id,
                 skip_model=args.skip_model,
-                verbose=args.verbose
+                verbose=args.verbose,
+                debug=args.debug,
+                debug_output_dir=args.debug_output_dir
             )
             
             if not args.output:

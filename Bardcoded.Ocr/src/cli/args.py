@@ -80,6 +80,15 @@ def create_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable verbose logging"
     )
+    process_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug mode: save intermediary images for each processing step (denoise, deskew, grayscale, OCR bounding boxes, result bounding boxes)"
+    )
+    process_parser.add_argument(
+        "--debug-output-dir",
+        help="Directory to save debug output files (default: ./debug_output)"
+    )
     
     # Version command
     subparsers.add_parser("version", help="Show version information")

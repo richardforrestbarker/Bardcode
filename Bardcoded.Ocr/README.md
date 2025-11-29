@@ -172,6 +172,37 @@ Configure OCR engine and model:
 python cli.py process --image receipt.jpg --output result.json --ocr-engine paddle --model microsoft/layoutlmv3-base --device cuda
 ```
 
+### Debug Mode
+
+Debug mode saves intermediary images for each processing step, allowing you to validate that each stage of the pipeline is functioning correctly:
+
+```bash
+python cli.py process \
+  --image receipt.jpg \
+  --output result.json \
+  --debug \
+  --debug-output-dir ./my_debug_output
+```
+
+When debug mode is enabled, the following files are created in the debug output directory:
+
+| Step | File | Description |
+|------|------|-------------|
+| 1 | `step_01_source_page01.png` | Original source image |
+| 2 | `step_02_grayscale_page01.png` | Grayscale converted image |
+| 3 | `step_03_denoised_page01.png` | Denoised image (if --denoise enabled) |
+| 4 | `step_04_deskewed_page01.png` | Deskewed image (if --deskew enabled) |
+| 5 | `step_05_contrast_enhanced_page01.png` | Contrast enhanced image |
+| 6 | `step_06_preprocessed_final_page01.png` | Final preprocessed image sent to OCR |
+| 7 | `step_07_paddle_bboxes_page01.png` | Image with OCR bounding boxes drawn (color-coded by confidence) |
+| 8 | `step_08_result_bboxes_page01.png` | Image with extracted field bounding boxes drawn |
+| - | `debug_summary.json` | Summary JSON with list of files and final result |
+
+The debug output helps diagnose issues in the processing pipeline:
+- **Low OCR accuracy?** Check grayscale and preprocessing steps
+- **Missing text?** Examine OCR bounding boxes visualization
+- **Incorrect field extraction?** Review result bounding boxes to see what fields were identified
+
 ### Python API
 
 ```python
