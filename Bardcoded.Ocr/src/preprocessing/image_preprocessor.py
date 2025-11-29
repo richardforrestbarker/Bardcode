@@ -17,6 +17,7 @@ Preprocessing pipeline order for best OCR accuracy:
 import logging
 import tempfile
 import os
+import io
 from typing import Tuple, Optional, Any, TYPE_CHECKING
 import numpy as np
 
@@ -130,7 +131,6 @@ class ImagePreprocessor:
                 blob = img.make_blob()
             
             # Convert blob to numpy array via PIL
-            import io
             pil_img = Image.open(io.BytesIO(blob))
             if pil_img.mode != 'RGB':
                 pil_img = pil_img.convert('RGB')
@@ -152,7 +152,6 @@ class ImagePreprocessor:
             return
         try:
             from PIL import Image
-            import io
             
             # Clone to avoid modifying original
             with img.clone() as debug_img:
@@ -166,7 +165,7 @@ class ImagePreprocessor:
             
             # Use debug manager's save method if available
             debug_path = os.path.join(
-                self.debug_manager.output_dir if hasattr(self.debug_manager, 'output_dir') else '/tmp',
+                self.debug_manager.output_dir if hasattr(self.debug_manager, 'output_dir') else tempfile.gettempdir(),
                 f"page_{page_num}_{step_name}.png"
             )
             pil_img.save(debug_path)
@@ -219,7 +218,6 @@ class ImagePreprocessor:
         try:
             from wand.image import Image as WandImage
             from PIL import Image
-            import io
             
             # Convert numpy array to PNG bytes
             pil_img = Image.fromarray(img_array)
@@ -404,9 +402,6 @@ class ImagePreprocessor:
         try:
             from wand.color import Color
             
-            # Make a clone to work with
-            result = img.clone()
-            
             # Use fuzz factor to handle slight color variations
             # The fuzz factor (as percentage) determines how similar colors
             # must be to be considered the "same" for background removal
@@ -416,31 +411,27 @@ class ImagePreprocessor:
             # This works well for receipts which typically have white/light backgrounds
             
             # First, try to make the background transparent
-            # We'll use the corner pixels to estimate background color
             try:
-                # Get corner pixel colors for background estimation
-                with result.clone() as corner_sampler:
-                    corner_sampler.crop(0, 0, 1, 1)
-                    # Set fuzz for background removal
-                result.fuzz = result.quantum_range * (fuzz_percent / 100.0)
+                # Set fuzz for background removal
+                img.fuzz = img.quantum_range * (fuzz_percent / 100.0)
                 
                 # Remove white/light background (common for receipts)
-                result.transparent_color(Color('white'), alpha=0.0, fuzz=result.fuzz)
+                img.transparent_color(Color('white'), alpha=0.0, fuzz=img.fuzz)
                 
                 # Flatten to white background to ensure consistent processing
-                result.background_color = Color('white')
-                result.alpha_channel = 'remove'
+                img.background_color = Color('white')
+                img.alpha_channel = 'remove'
                 
             except Exception as inner_e:
                 logger.debug(f"Transparent background removal failed: {inner_e}")
                 # Fall back to simple normalization
-                result.normalize()
+                img.normalize()
             
             # Apply auto-level to improve contrast after background removal
-            result.auto_level()
+            img.auto_level()
             
             logger.debug("Applied background removal")
-            return result
+            return img
             
         except Exception as e:
             logger.warning(f"Background removal failed: {e}")

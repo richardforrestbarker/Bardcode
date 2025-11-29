@@ -228,13 +228,10 @@ class TestImageMagickPreprocessing:
         assert result.shape[0] > 0
         assert result.shape[1] > 0
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_convert_to_tiff(self, sample_image_path):
         """Test TIFF conversion step."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor()
         
@@ -244,13 +241,10 @@ class TestImageMagickPreprocessing:
             assert result is not None
             assert result.format.lower() == 'tiff'
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_fix_resolution_sets_300_dpi(self, sample_image_path):
         """Test that fix_resolution sets the image to 300 DPI."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor(target_dpi=300)
         
@@ -264,13 +258,10 @@ class TestImageMagickPreprocessing:
             # Resolution should be set to 300 DPI
             assert result.resolution == (300, 300)
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_remove_background(self, sample_image_path):
         """Test background removal step."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor()
         
@@ -282,13 +273,10 @@ class TestImageMagickPreprocessing:
             assert result.width > 0
             assert result.height > 0
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_deskew_wand(self, sample_image_path):
         """Test ImageMagick deskew step."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor(deskew=True)
         
@@ -299,13 +287,10 @@ class TestImageMagickPreprocessing:
             assert result.width > 0
             assert result.height > 0
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_grayscale_conversion(self, sample_image_path):
         """Test grayscale conversion using ImageMagick."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor()
         
@@ -315,13 +300,10 @@ class TestImageMagickPreprocessing:
             assert result is not None
             assert result.type == 'grayscale'
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_enhance_contrast_wand(self, sample_image_path):
         """Test contrast enhancement using ImageMagick."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor(enhance_contrast=True)
         
@@ -332,13 +314,10 @@ class TestImageMagickPreprocessing:
             assert result.width > 0
             assert result.height > 0
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_denoise_wand(self, sample_image_path):
         """Test denoising using ImageMagick."""
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor(denoise=True)
         
@@ -349,12 +328,10 @@ class TestImageMagickPreprocessing:
             assert result.width > 0
             assert result.height > 0
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_full_imagemagick_pipeline(self, sample_image_path):
         """Test the full ImageMagick preprocessing pipeline."""
+        pytest.importorskip("wand.image", reason="Wand not available")
+        
         preprocessor = ImagePreprocessor(
             target_dpi=300,
             deskew=True,
@@ -411,10 +388,6 @@ class TestPreprocessingPipelineOrder:
         
         os.unlink(tmp.name)
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("wand.image", reason="Wand not available"),
-        reason="ImageMagick/Wand not installed"
-    )
     def test_pipeline_order_tiff_first(self, sample_image_path):
         """
         Test that TIFF conversion happens first in the pipeline.
@@ -422,7 +395,8 @@ class TestPreprocessingPipelineOrder:
         Pipeline order should be: TIFF -> Resolution -> Background -> Deskew -> 
                                  Grayscale -> Contrast -> Denoise
         """
-        from wand.image import Image as WandImage
+        wand = pytest.importorskip("wand.image", reason="Wand not available")
+        WandImage = wand.Image
         
         preprocessor = ImagePreprocessor(
             target_dpi=300,
