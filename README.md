@@ -606,6 +606,8 @@ python cli.py process \
 | `--denoise` | Apply denoising preprocessing | false |
 | `--deskew` | Apply deskew correction | false |
 | `--job-id` | Custom job identifier | auto-generated |
+| `--debug` | Enable debug mode: save intermediary images for each processing step | false |
+| `--debug-output-dir` | Directory to save debug output files | ./debug_output |
 
 ### OCR Output Format
 

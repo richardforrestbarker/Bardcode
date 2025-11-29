@@ -558,3 +558,174 @@ class TestPreprocessing:
         
         assert len(image.shape) == 3
         assert image.shape[2] == 3
+
+
+class TestDebugOutput:
+    """Tests for debug output functionality."""
+
+    def test_debug_argument_parsing(self):
+        """Test that --debug argument is properly parsed."""
+        from src.cli.args import parse_args
+        
+        args, _ = parse_args(['process', '--image', 'test.jpg', '--debug'])
+        assert args.debug is True
+
+    def test_debug_argument_default_false(self):
+        """Test that debug defaults to False."""
+        from src.cli.args import parse_args
+        
+        args, _ = parse_args(['process', '--image', 'test.jpg'])
+        assert args.debug is False
+
+    def test_debug_output_dir_argument(self):
+        """Test that --debug-output-dir argument is properly parsed."""
+        from src.cli.args import parse_args
+        
+        args, _ = parse_args(['process', '--image', 'test.jpg', '--debug', '--debug-output-dir', '/custom/path'])
+        assert args.debug_output_dir == '/custom/path'
+
+    def test_debug_output_manager_creation(self, tmp_path):
+        """Test that DebugOutputManager creates output directory."""
+        from src.cli.debug_output import DebugOutputManager
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job-123")
+        
+        assert manager.job_dir.exists()
+        assert manager.job_id == "test-job-123"
+
+    def test_debug_output_manager_save_source_image(self, tmp_path, sample_receipt_image):
+        """Test saving source image in debug mode."""
+        from src.cli.debug_output import DebugOutputManager
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        result = manager.save_source_image(sample_receipt_image, page_num=1)
+        
+        assert result
+        assert Path(result).exists()
+        assert "step_01_source" in result
+
+    def test_debug_output_manager_save_grayscale_image(self, tmp_path, sample_receipt_image):
+        """Test saving grayscale image in debug mode."""
+        from src.cli.debug_output import DebugOutputManager
+        import cv2
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(sample_receipt_image, cv2.COLOR_RGB2GRAY)
+        
+        result = manager.save_grayscale_image(gray, page_num=1)
+        
+        assert result
+        assert Path(result).exists()
+        assert "step_02_grayscale" in result
+
+    def test_debug_output_manager_save_ocr_bounding_boxes(self, tmp_path, sample_receipt_image, sample_words):
+        """Test saving OCR bounding boxes visualization."""
+        from src.cli.debug_output import DebugOutputManager
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        result = manager.save_ocr_bounding_boxes(
+            sample_receipt_image, 
+            sample_words, 
+            page_num=1, 
+            ocr_engine="paddle"
+        )
+        
+        assert result
+        assert Path(result).exists()
+        assert "step_07_paddle_bboxes" in result
+
+    def test_debug_output_manager_save_result_bounding_boxes(self, tmp_path, sample_receipt_image, sample_ocr_result):
+        """Test saving result bounding boxes visualization."""
+        from src.cli.debug_output import DebugOutputManager
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        result = manager.save_result_bounding_boxes(
+            sample_receipt_image, 
+            sample_ocr_result, 
+            page_num=1
+        )
+        
+        assert result
+        assert Path(result).exists()
+        assert "step_08_result_bboxes" in result
+
+    def test_debug_output_manager_save_debug_summary(self, tmp_path, sample_ocr_result):
+        """Test saving debug summary JSON."""
+        from src.cli.debug_output import DebugOutputManager
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        result = manager.save_debug_summary(sample_ocr_result)
+        
+        assert result
+        assert Path(result).exists()
+        
+        # Verify JSON content
+        with open(result) as f:
+            summary = json.load(f)
+        assert summary['job_id'] == 'test-job'
+        assert 'processing_steps' in summary
+        assert 'result' in summary
+
+    def test_preprocessor_with_debug_manager(self, tmp_path, sample_receipt_image):
+        """Test that ImagePreprocessor integrates with DebugOutputManager."""
+        from src.cli.debug_output import DebugOutputManager
+        from src.preprocessing.image_preprocessor import ImagePreprocessor
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        preprocessor = ImagePreprocessor(
+            denoise=True,
+            deskew=True,
+            enhance_contrast=True,
+            debug_manager=manager
+        )
+        
+        # Process image
+        result = preprocessor.preprocess_array(sample_receipt_image, page_num=1)
+        
+        assert result is not None
+        
+        # Check that debug files were created
+        debug_files = list(manager.job_dir.glob("*.png"))
+        assert len(debug_files) >= 1  # At least grayscale should be saved
+
+    def test_debug_mode_creates_all_step_files(self, tmp_path, sample_receipt_image):
+        """Test that debug mode creates files for all processing steps."""
+        from src.cli.debug_output import DebugOutputManager
+        from src.preprocessing.image_preprocessor import ImagePreprocessor
+        
+        debug_dir = tmp_path / "debug"
+        manager = DebugOutputManager(output_dir=str(debug_dir), job_id="test-job")
+        
+        # Save source
+        manager.save_source_image(sample_receipt_image, page_num=1)
+        
+        # Process with preprocessor
+        preprocessor = ImagePreprocessor(
+            denoise=True,
+            deskew=True,
+            enhance_contrast=True,
+            debug_manager=manager
+        )
+        preprocessor.preprocess_array(sample_receipt_image, page_num=1)
+        
+        # Check files exist
+        files = list(manager.job_dir.glob("step_*.png"))
+        file_names = [f.name for f in files]
+        
+        # Should have at least source, grayscale, denoised, deskewed, contrast, preprocessed
+        assert any("step_01" in f for f in file_names)  # source
+        assert any("step_02" in f for f in file_names)  # grayscale

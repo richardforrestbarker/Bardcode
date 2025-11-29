@@ -28,7 +28,9 @@ def process_command(
     deskew: bool = False,
     job_id: Optional[str] = None,
     skip_model: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    debug: bool = False,
+    debug_output_dir: Optional[str] = None
 ) -> dict:
     """
     Process receipt images and extract structured data.
@@ -44,6 +46,8 @@ def process_command(
         job_id: Optional job identifier
         skip_model: Skip model inference and use only heuristics
         verbose: Enable verbose logging
+        debug: Enable debug mode to save intermediary images
+        debug_output_dir: Directory for debug output files
         
     Returns:
         Dictionary containing extracted receipt data
@@ -54,6 +58,8 @@ def process_command(
     logger.info(f"Processing {len(image_paths)} image(s)...")
     logger.info(f"Model: {model_name}")
     logger.info(f"OCR Engine: {ocr_engine}")
+    if debug:
+        logger.info("Debug mode enabled - saving intermediary images")
     
     # Resolve device
     actual_device = get_device(device)
@@ -64,11 +70,20 @@ def process_command(
     from ..ocr.ocr_engine import create_ocr_engine
     from ..postprocessing.field_extractor import FieldExtractor
     
-    # Initialize components
+    # Initialize debug output manager if debug mode is enabled
+    debug_manager = None
+    if debug:
+        from .debug_output import DebugOutputManager
+        effective_job_id = job_id or f"job-{hash(tuple(image_paths)) % 100000:05d}"
+        debug_output_directory = debug_output_dir or "./debug_output"
+        debug_manager = DebugOutputManager(output_dir=debug_output_directory, job_id=effective_job_id)
+    
+    # Initialize components with debug support
     preprocessor = ImagePreprocessor(
         denoise=denoise,
         deskew=deskew,
-        enhance_contrast=True
+        enhance_contrast=True,
+        debug_manager=debug_manager
     )
     ocr = create_ocr_engine(ocr_engine, use_gpu=(actual_device == "cuda"))
     field_extractor = FieldExtractor()
@@ -89,6 +104,7 @@ def process_command(
     }
     
     all_words = []
+    source_images = []  # Store source images for debug output
     
     try:
         for page_num, image_path in enumerate(image_paths):
@@ -99,12 +115,23 @@ def process_command(
             img_height, img_width = get_image_dimensions(image)
             logger.info(f"Image size: {img_width}x{img_height}")
             
-            # Preprocess image
-            processed_image = preprocessor.preprocess_array(image)
+            # Store source image for debug output
+            if debug and debug_manager:
+                source_images.append(image.copy())
+                debug_manager.save_source_image(image, page_num + 1)
+            
+            # Preprocess image (with debug output if enabled)
+            processed_image = preprocessor.preprocess_array(image, page_num=page_num + 1)
             
             # Run OCR
             words = ocr.detect_and_recognize(processed_image)
             logger.info(f"OCR detected {len(words)} text regions")
+            
+            # Save OCR bounding boxes if debug mode is enabled
+            if debug and debug_manager:
+                debug_manager.save_ocr_bounding_boxes(
+                    processed_image, words, page_num + 1, ocr_engine
+                )
             
             # Normalize boxes to 0-1000 scale
             normalized_words = normalize_boxes(words, img_width, img_height)
@@ -202,6 +229,12 @@ def process_command(
             # Extract line items
             line_items = field_extractor.extract_line_items(all_words, model_predictions)
             result["line_items"] = line_items
+        
+        # Save result bounding boxes for debug mode
+        if debug and debug_manager and source_images:
+            for page_num, source_image in enumerate(source_images):
+                debug_manager.save_result_bounding_boxes(source_image, result, page_num + 1)
+            debug_manager.save_debug_summary(result)
     
     except Exception as e:
         logger.error(f"Error processing receipt: {e}")
