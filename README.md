@@ -584,6 +584,13 @@ python cli.py process \
   --denoise \
   --deskew \
   --model microsoft/layoutlmv3-base
+
+  # or 
+
+   python cli.py process --image tests/test-receipts/receipt-3.jpg --output tests/test-receipts/result.json --ocr-engine tesseract --model microsoft/layoutlmv3-base --debug --debug-output-dir ./tests/test-receipts/receipt-3/ --denoise --deskew
+
+
+
 ```
 
 Process multi-page receipt:
