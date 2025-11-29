@@ -173,7 +173,8 @@ class ImagePreprocessor:
         """
         Detect and correct image skew.
         
-        Uses Hough line transform to detect dominant text line orientation.
+        Uses adaptive thresholding and morphological operations to detect text lines,
+        then applies Hough line transform to calculate the skew angle.
         
         Args:
             image: Grayscale image
@@ -184,17 +185,33 @@ class ImagePreprocessor:
         try:
             import cv2
             
-            # Use Canny edge detection to find edges
-            edges = cv2.Canny(image, 50, 150, apertureSize=3)
+            # Apply bilateral filter to reduce noise while preserving edges
+            filtered = cv2.bilateralFilter(image, 9, 75, 75)
             
-            # Use Hough line transform to detect lines
+            # Apply adaptive threshold to create binary image with text as foreground
+            binary = cv2.adaptiveThreshold(
+                filtered, 255, 
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                cv2.THRESH_BINARY_INV, 
+                11, 2
+            )
+            
+            # Use Canny edge detection on binary image
+            edges = cv2.Canny(binary, 50, 150, apertureSize=3)
+            
+            # Morphological dilation to connect text characters into horizontal lines
+            # This helps detect text line orientation rather than individual character edges
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
+            dilated = cv2.dilate(edges, kernel, iterations=1)
+            
+            # Use Hough line transform with relaxed parameters
             lines = cv2.HoughLinesP(
-                edges, 
+                dilated, 
                 rho=1, 
                 theta=np.pi / 180, 
-                threshold=100,
-                minLineLength=100, 
-                maxLineGap=10
+                threshold=50,       # Lower threshold to detect more lines
+                minLineLength=50,   # Shorter minimum line length
+                maxLineGap=20       # Allow larger gaps between line segments
             )
             
             if lines is None or len(lines) == 0:
@@ -205,11 +222,12 @@ class ImagePreprocessor:
             angles = []
             for line in lines:
                 x1, y1, x2, y2 = line[0]
-                if x2 - x1 != 0:  # Avoid division by zero
+                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                if x2 - x1 != 0 and length > 30:  # Only consider lines of significant length
                     angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-                    # Only consider near-horizontal lines (within 45 degrees of horizontal)
+                    # Only consider near-horizontal lines (within 30 degrees)
                     # These represent text lines on a receipt
-                    if abs(angle) < 45:
+                    if abs(angle) < 30:
                         angles.append(angle)
             
             if not angles:
@@ -224,11 +242,15 @@ class ImagePreprocessor:
                 logger.debug(f"Skew angle ({angle:.2f}°) too small, skipping correction")
                 return image
             
+            logger.debug(f"Detected {len(angles)} text lines, median angle: {angle:.2f}°")
+            
             # Get image dimensions
             (h, w) = image.shape[:2]
             center = (w // 2, h // 2)
             
-            # Create rotation matrix - rotate by negative angle to straighten
+            # Create rotation matrix
+            # Rotate by the detected angle to straighten the text
+            # (cv2.getRotationMatrix2D rotates counter-clockwise by positive angle)
             M = cv2.getRotationMatrix2D(center, angle, 1.0)
             
             # Calculate new bounding box size to avoid cutting off content
