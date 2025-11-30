@@ -318,13 +318,13 @@ postprocessing:
 ### Pipeline Stages
 
 1. **Image Preprocessing** (via ImageMagick):
-   - Convert to TIFF
-   - Fix resolution (300 DPI)
-   - Remove background
-   - Deskew
-   - Grayscale
+   - Deskew (rotation correction)
    - Contrast enhancement
+   - Grayscale conversion
+   - Remove background
    - Denoise
+   - Convert to TIFF
+   - Fix resolution (300 DPI) - last step to avoid large intermediate files
 2. **Text Detection**: PaddleOCR detector finds text regions
 3. **OCR**: PaddleOCR recognizer extracts text with bounding boxes
 4. **Tokenization**: Split text into model tokens, map to boxes
@@ -343,26 +343,26 @@ Shell scripts are provided in the `scripts/` directory for each preprocessing st
 
 # Or run steps individually:
 
-# Step 1: Convert to TIFF (optimal format for Tesseract)
-./scripts/convert_to_tiff.sh input.jpg step1.tiff
+# Step 1: Deskew (straighten the image)
+./scripts/deskew.sh input.jpg step1.tiff
 
-# Step 2: Fix resolution to 300 DPI
-./scripts/fix_resolution.sh step1.tiff step2.tiff 300
+# Step 2: Enhance contrast
+./scripts/enhance_contrast.sh step1.tiff step2.tiff
 
-# Step 3: Remove background
-./scripts/remove_background.sh step2.tiff step3.tiff
+# Step 3: Convert to grayscale
+./scripts/grayscale.sh step2.tiff step3.tiff
 
-# Step 4: Deskew (straighten the image)
-./scripts/deskew.sh step3.tiff step4.tiff
+# Step 4: Remove background
+./scripts/remove_background.sh step3.tiff step4.tiff
 
-# Step 5: Convert to grayscale
-./scripts/grayscale.sh step4.tiff step5.tiff
+# Step 5: Denoise
+./scripts/denoise.sh step4.tiff step5.tiff
 
-# Step 6: Enhance contrast
-./scripts/enhance_contrast.sh step5.tiff step6.tiff
+# Step 6: Convert to TIFF (optimal format for Tesseract)
+./scripts/convert_to_tiff.sh step5.tiff step6.tiff
 
-# Step 7: Denoise
-./scripts/denoise.sh step6.tiff final.tiff
+# Step 7: Fix resolution to 300 DPI
+./scripts/fix_resolution.sh step6.tiff final.tiff 300
 ```
 
 #### Direct ImageMagick Commands
@@ -370,26 +370,26 @@ Shell scripts are provided in the `scripts/` directory for each preprocessing st
 If you prefer to run ImageMagick commands directly without the scripts:
 
 ```bash
-# Step 1: Convert to TIFF
-magick input.jpg -compress lzw step1.tiff
+# Step 1: Deskew
+magick input.jpg -deskew 40% -background white step1.tiff
 
-# Step 2: Fix resolution to 300 DPI
-magick step1.tiff -resample 300 -units PixelsPerInch step2.tiff
+# Step 2: Enhance contrast
+magick step1.tiff -auto-level -sigmoidal-contrast 3x50% step2.tiff
 
-# Step 3: Remove background
-magick step2.tiff -fuzz 10% -transparent white -background white -alpha remove -auto-level step3.tiff
+# Step 3: Grayscale
+magick step2.tiff -colorspace Gray step3.tiff
 
-# Step 4: Deskew
-magick step3.tiff -deskew 40% -background white step4.tiff
+# Step 4: Remove background
+magick step3.tiff -fuzz 10% -transparent white -background white -alpha remove -auto-level step4.tiff
 
-# Step 5: Grayscale
-magick step4.tiff -colorspace Gray step5.tiff
+# Step 5: Denoise
+magick step4.tiff -enhance step5.tiff
 
-# Step 6: Enhance contrast
-magick step5.tiff -auto-level -sigmoidal-contrast 3x50% step6.tiff
+# Step 6: Convert to TIFF
+magick step5.tiff -compress lzw step6.tiff
 
-# Step 7: Denoise
-magick step6.tiff -enhance final.tiff
+# Step 7: Fix resolution to 300 DPI
+magick step6.tiff -resample 300 -units PixelsPerInch final.tiff
 ```
 
 #### All-in-One Command
@@ -398,15 +398,26 @@ Run all preprocessing steps in a single ImageMagick command:
 
 ```bash
 magick input.jpg \
+    -deskew 40% -background white \
+    -auto-level -sigmoidal-contrast 3x50% \
+    -colorspace Gray \
+    -fuzz 10% -transparent white -background white -alpha remove -auto-level \
+    -enhance \
     -compress lzw \
     -resample 300 -units PixelsPerInch \
-    -fuzz 10% -transparent white -background white -alpha remove -auto-level \
-    -deskew 40% -background white \
-    -colorspace Gray \
-    -auto-level -sigmoidal-contrast 3x50% \
-    -enhance \
     output.tiff
 ```
+
+#### Image Size Limits
+
+Tesseract has a maximum image dimension limit of 32767 pixels. The preprocessing pipeline automatically handles this by:
+
+1. Checking the image dimensions before resampling
+2. Calculating what the dimensions would be after resampling to target DPI
+3. If the resampled image would exceed the limit, reducing DPI in increments of 50
+4. Minimum DPI is 100; if even 100 DPI would exceed limits, resolution adjustment is skipped
+
+Note: DPI is less important than contrast between text and background for OCR accuracy. Black text on white backgrounds gives the best results.
 
 ### Token-to-Box Mapping
 
