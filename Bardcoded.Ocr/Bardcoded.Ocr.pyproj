@@ -42,6 +42,7 @@
     <Compile Include="tests\__init__.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="scripts\" />
     <Folder Include="src\" />
     <Folder Include="src\models\" />
     <Folder Include="src\ocr\" />
@@ -59,6 +60,14 @@
     <Content Include="config\config.yaml" />
     <Content Include="docs\fine_tuning.md" />
     <Content Include=".gitignore" />
+    <Content Include="scripts\convert_to_tiff.sh" />
+    <Content Include="scripts\denoise.sh" />
+    <Content Include="scripts\deskew.sh" />
+    <Content Include="scripts\enhance_contrast.sh" />
+    <Content Include="scripts\fix_resolution.sh" />
+    <Content Include="scripts\grayscale.sh" />
+    <Content Include="scripts\preprocess_all.sh" />
+    <Content Include="scripts\remove_background.sh" />
   </ItemGroup>
   <!-- Import Python Tools targets only when available (Visual Studio only) -->
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets')" />
