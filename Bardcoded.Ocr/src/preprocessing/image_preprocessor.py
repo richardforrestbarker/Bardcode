@@ -81,56 +81,64 @@ class ImagePreprocessor:
         Returns:
             Preprocessed image as numpy array (RGB)
         """
-        logger.info(f"Preprocessing image: {image_path}")
-        
         try:
             from wand.image import Image as WandImage
             from PIL import Image
             
             with WandImage(filename=image_path) as img:
+                logger.info(f"Image size {img.width}x{img.height}")
                 # 1. Convert to TIFF format (internal processing)
+                
+                logger.info("Converting image to TIFF format")
                 img = self._convert_to_tiff(img)
                 if self.debug_manager:
                     self._save_debug_wand_image(img, "tiff_converted", page_num)
+                logger.info("Converted image to TIFF format")
                 
                 # 2. Fix resolution to 300 DPI
                 img = self._fix_resolution(img)
                 if self.debug_manager:
                     self._save_debug_wand_image(img, "resolution_fixed", page_num)
-                
+                logger.info("Fixed image resolution to target DPI")
+
                 # 3. Remove background
                 img = self._remove_background(img)
                 if self.debug_manager:
                     self._save_debug_wand_image(img, "background_removed", page_num)
-                
+                logger.info("Removed image background")
+
                 # 4. Deskew
                 if self.deskew:
                     img = self._deskew_wand(img)
                     if self.debug_manager:
                         self._save_debug_wand_image(img, "deskewed", page_num)
+                    logger.info("Applied deskew correction")
                 
                 # 5. Convert to grayscale
                 img = self._grayscale(img)
                 if self.debug_manager:
                     self._save_debug_wand_image(img, "grayscale", page_num)
+                logger.info("Converted image to grayscale")
                 
                 # 6. Enhance contrast
                 if self.enhance_contrast:
                     img = self._enhance_contrast_wand(img)
                     if self.debug_manager:
                         self._save_debug_wand_image(img, "contrast_enhanced", page_num)
-                
+                logger.info("Enhanced image contrast")
                 # 7. Denoise
                 if self.denoise:
                     img = self._denoise_wand(img)
                     if self.debug_manager:
                         self._save_debug_wand_image(img, "denoised", page_num)
-                
+                logger.info("Applied denoising to image")
+
                 # Convert to numpy array for OCR processing
                 img.format = 'png'
                 blob = img.make_blob()
             
             # Convert blob to numpy array via PIL
+           
             pil_img = Image.open(io.BytesIO(blob))
             if pil_img.mode != 'RGB':
                 pil_img = pil_img.convert('RGB')
@@ -139,7 +147,7 @@ class ImagePreprocessor:
             # Save final preprocessed debug image
             if self.debug_manager:
                 self.debug_manager.save_preprocessed_image(result, page_num)
-            
+            logger.info("Completed image preprocessing")
             return result
             
         except ImportError as e:
@@ -191,125 +199,6 @@ class ImagePreprocessor:
                 "Install with: pip install Wand opencv-python Pillow"
             )
     
-    def preprocess_array(self, img_array: np.ndarray, page_num: int = 1) -> np.ndarray:
-        """
-        Preprocess a numpy array image using OpenCV fallback.
-        
-        This method is used when ImageMagick is not available or when
-        preprocessing from an in-memory array.
-        
-        Pipeline order: TIFF -> Resolution -> Background removal -> Deskew -> 
-                       Grayscale -> Contrast -> Denoise
-        
-        Args:
-            img_array: Image as numpy array
-            page_num: Page number for debug output
-            
-        Returns:
-            Preprocessed image as numpy array (RGB)
-        """
-        try:
-            import cv2
-        except ImportError:
-            logger.warning("OpenCV not available, returning original image")
-            return img_array
-        
-        # Try to use ImageMagick via Wand for array processing
-        try:
-            from wand.image import Image as WandImage
-            from PIL import Image
-            
-            # Convert numpy array to PNG bytes
-            pil_img = Image.fromarray(img_array)
-            buffer = io.BytesIO()
-            pil_img.save(buffer, format='PNG')
-            buffer.seek(0)
-            
-            with WandImage(blob=buffer.getvalue()) as img:
-                # Apply full ImageMagick pipeline
-                img = self._convert_to_tiff(img)
-                img = self._fix_resolution(img)
-                img = self._remove_background(img)
-                
-                if self.deskew:
-                    img = self._deskew_wand(img)
-                
-                img = self._grayscale(img)
-                
-                if self.enhance_contrast:
-                    img = self._enhance_contrast_wand(img)
-                
-                if self.denoise:
-                    img = self._denoise_wand(img)
-                
-                # Convert back to numpy array
-                img.format = 'png'
-                blob = img.make_blob()
-            
-            result_pil = Image.open(io.BytesIO(blob))
-            if result_pil.mode != 'RGB':
-                result_pil = result_pil.convert('RGB')
-            result = np.array(result_pil)
-            
-            if self.debug_manager:
-                self.debug_manager.save_preprocessed_image(result, page_num)
-            
-            return result
-            
-        except ImportError:
-            logger.debug("Wand not available, using OpenCV fallback for array")
-        
-        # OpenCV fallback implementation
-        # 1. Skip TIFF conversion for array (not applicable)
-        
-        # 2. Handle RGBA to RGB conversion
-        if len(img_array.shape) == 3:
-            if img_array.shape[2] == 4:  # RGBA
-                img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
-        
-        # 3. Remove background (OpenCV approximation)
-        processed = self._remove_background_opencv(img_array)
-        
-        # 4. Deskew
-        if self.deskew:
-            # Convert to grayscale temporarily for deskew detection
-            if len(processed.shape) == 3:
-                gray_for_deskew = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
-            else:
-                gray_for_deskew = processed
-            processed = self._deskew(gray_for_deskew)
-            if self.debug_manager:
-                self.debug_manager.save_deskewed_image(processed, page_num)
-        
-        # 5. Convert to grayscale
-        if len(processed.shape) == 3:
-            gray = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = processed
-        
-        if self.debug_manager:
-            self.debug_manager.save_grayscale_image(gray, page_num)
-        
-        # 6. Enhance contrast
-        if self.enhance_contrast:
-            gray = self._enhance_contrast(gray)
-            if self.debug_manager:
-                self.debug_manager.save_contrast_enhanced_image(gray, page_num)
-        
-        # 7. Denoise
-        if self.denoise:
-            gray = self._denoise(gray)
-            if self.debug_manager:
-                self.debug_manager.save_denoised_image(gray, page_num)
-        
-        # Convert back to RGB for OCR engines
-        result = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
-        
-        if self.debug_manager:
-            self.debug_manager.save_preprocessed_image(result, page_num)
-        
-        return result
-    
     # ==================== ImageMagick (Wand) Methods ====================
     
     def _convert_to_tiff(self, img):
@@ -356,9 +245,10 @@ class ImagePreprocessor:
             # Get current resolution (x, y)
             if current_dpi and current_dpi[0] > 0:
                 current_x_dpi = current_dpi[0]
+                # this is one reason I don't like python -- ternary operators are clunky and obfuscate meaning.
                 current_y_dpi = current_dpi[1] if len(current_dpi) > 1 else current_dpi[0]
             else:
-                # Default to 72 DPI if not specified
+                # Default to 72 DPI if current DPI is not specified
                 current_x_dpi = 72
                 current_y_dpi = 72
             
@@ -370,7 +260,7 @@ class ImagePreprocessor:
             if abs(scale_x - 1.0) > 0.05 or abs(scale_y - 1.0) > 0.05:
                 new_width = int(img.width * scale_x)
                 new_height = int(img.height * scale_y)
-                
+                logger.debug(f"Resizing image from {img.width}x{img.height} to {new_width}x{new_height} and {current_x_dpi}x{current_y_dpi}DPI to {self.target_dpi}x{self.target_dpi} DPI")
                 # Use Lanczos filter for high-quality resampling
                 img.resize(new_width, new_height, filter='lanczos')
                 logger.debug(f"Resized image from {current_x_dpi}x{current_y_dpi} DPI to {target} DPI")

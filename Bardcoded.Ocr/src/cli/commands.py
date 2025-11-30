@@ -110,18 +110,9 @@ def process_command(
         for page_num, image_path in enumerate(image_paths):
             logger.info(f"Processing page {page_num + 1}: {image_path}")
             
-            # Load image
-            image = load_image(image_path)
-            img_height, img_width = get_image_dimensions(image)
-            logger.info(f"Image size: {img_width}x{img_height}")
-            
-            # Store source image for debug output
-            if debug and debug_manager:
-                source_images.append(image.copy())
-                debug_manager.save_source_image(image, page_num + 1)
             
             # Preprocess image (with debug output if enabled)
-            processed_image = preprocessor.preprocess_array(image, page_num=page_num + 1)
+            processed_image = preprocessor.preprocess(image_path, page_num=page_num + 1)
             
             # Run OCR
             words = ocr.detect_and_recognize(processed_image)
