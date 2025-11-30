@@ -78,25 +78,30 @@ class ImagePreprocessor:
     
     def _check_imagemagick(self):
         """Check if ImageMagick is installed and available."""
-        try:
-            result = subprocess.run(
-                ["convert", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode != 0:
-                raise RuntimeError("ImageMagick 'convert' command failed")
-            logger.debug(f"ImageMagick version: {result.stdout.split('\n')[0]}")
-        except FileNotFoundError:
-            raise RuntimeError(
-                "ImageMagick is not installed. Please install it:\n"
-                "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
-                "  macOS: brew install imagemagick\n"
-                "  Windows: Download from https://imagemagick.org/script/download.php"
-            )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("ImageMagick version check timed out")
+        # Try 'magick' first (ImageMagick 7+), then 'convert' (ImageMagick 6)
+        for cmd in ["magick", "convert"]:
+            try:
+                result = subprocess.run(
+                    [cmd, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    self._magick_cmd = cmd
+                    logger.debug(f"ImageMagick version: {result.stdout.split('\n')[0]}")
+                    return
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                continue
+        
+        raise RuntimeError(
+            "ImageMagick is not installed. Please install it:\n"
+            "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+            "  macOS: brew install imagemagick\n"
+            "  Windows: Download from https://imagemagick.org/script/download.php"
+        )
     
     def _run_script(self, script_name: str, *args) -> bool:
         """
@@ -142,16 +147,18 @@ class ImagePreprocessor:
     
     def _run_imagemagick_cmd(self, args: list) -> bool:
         """
-        Run an ImageMagick convert command directly.
+        Run an ImageMagick command directly.
+        
+        Uses 'magick' (ImageMagick 7+) if available, otherwise 'convert' (ImageMagick 6).
         
         Args:
-            args: Arguments to pass to convert command
+            args: Arguments to pass to the ImageMagick command
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            cmd = ["convert"] + args
+            cmd = [self._magick_cmd] + args
             logger.debug(f"Running: {' '.join(cmd)}")
             
             result = subprocess.run(

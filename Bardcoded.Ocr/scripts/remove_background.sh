@@ -9,9 +9,16 @@
 #
 # ImageMagick commands:
 #   # Remove white background with fuzz tolerance
-#   convert <input> -fuzz 10% -transparent white -background white -alpha remove -auto-level <output>
+#   magick <input> -fuzz 10% -transparent white -background white -alpha remove -auto-level <output>
 
 set -e
+
+# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
+if command -v magick &> /dev/null; then
+    MAGICK_CMD="magick"
+else
+    MAGICK_CMD="convert"
+fi
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <input_image> <output_image> [fuzz_percent]"
@@ -34,7 +41,7 @@ fi
 # -background white: Set background color for flatten
 # -alpha remove: Remove alpha channel by flattening to background
 # -auto-level: Stretch histogram to improve contrast
-convert "$INPUT" \
+$MAGICK_CMD "$INPUT" \
     -fuzz "${FUZZ_PERCENT}%" \
     -transparent white \
     -background white \

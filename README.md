@@ -555,7 +555,7 @@ Windows:
 
 Verify installation:
 ```bash
-convert --version
+magick --version
 ```
 
 See `Bardcoded.Ocr/README.md` for details on using the preprocessing scripts manually.

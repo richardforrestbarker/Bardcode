@@ -7,9 +7,16 @@
 #   ./grayscale.sh receipt.tiff receipt_gray.tiff
 #
 # ImageMagick command:
-#   convert <input> -colorspace Gray <output>
+#   magick <input> -colorspace Gray <output>
 
 set -e
+
+# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
+if command -v magick &> /dev/null; then
+    MAGICK_CMD="magick"
+else
+    MAGICK_CMD="convert"
+fi
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 <input_image> <output_image>"
@@ -26,6 +33,6 @@ if [ ! -f "$INPUT" ]; then
 fi
 
 # Convert to grayscale using the Gray colorspace
-convert "$INPUT" -colorspace Gray "$OUTPUT"
+$MAGICK_CMD "$INPUT" -colorspace Gray "$OUTPUT"
 
 echo "Converted to grayscale: $OUTPUT"

@@ -10,9 +10,16 @@
 # ImageMagick commands:
 #   # Auto-level stretches the histogram
 #   # Sigmoidal contrast applies non-linear contrast enhancement
-#   convert <input> -auto-level -sigmoidal-contrast 3x50% <output>
+#   magick <input> -auto-level -sigmoidal-contrast 3x50% <output>
 
 set -e
+
+# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
+if command -v magick &> /dev/null; then
+    MAGICK_CMD="magick"
+else
+    MAGICK_CMD="convert"
+fi
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <input_image> <output_image> [contrast_strength]"
@@ -34,7 +41,7 @@ fi
 # -sigmoidal-contrast: Apply S-curve contrast enhancement
 #   Format: strength x midpoint%
 #   strength=3 is moderate, midpoint=50% targets middle tones
-convert "$INPUT" \
+$MAGICK_CMD "$INPUT" \
     -auto-level \
     -sigmoidal-contrast "${CONTRAST}x50%" \
     "$OUTPUT"

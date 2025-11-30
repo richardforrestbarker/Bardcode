@@ -8,9 +8,16 @@
 #   ./convert_to_tiff.sh receipt.jpg receipt.tiff
 #
 # ImageMagick command:
-#   convert <input> -compress lzw <output.tiff>
+#   magick <input> -compress lzw <output.tiff>
 
 set -e
+
+# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
+if command -v magick &> /dev/null; then
+    MAGICK_CMD="magick"
+else
+    MAGICK_CMD="convert"
+fi
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 <input_image> <output_image>"
@@ -27,6 +34,6 @@ if [ ! -f "$INPUT" ]; then
 fi
 
 # Convert to TIFF with LZW compression for smaller file size while maintaining quality
-convert "$INPUT" -compress lzw "$OUTPUT"
+$MAGICK_CMD "$INPUT" -compress lzw "$OUTPUT"
 
 echo "Converted $INPUT to TIFF format: $OUTPUT"

@@ -11,9 +11,16 @@
 # Lower values are more aggressive. Default is 40%.
 #
 # ImageMagick command:
-#   convert <input> -deskew 40% -background white +repage <output>
+#   magick <input> -deskew 40% -background white +repage <output>
 
 set -e
+
+# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
+if command -v magick &> /dev/null; then
+    MAGICK_CMD="magick"
+else
+    MAGICK_CMD="convert"
+fi
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <input_image> <output_image> [threshold]"
@@ -34,7 +41,7 @@ fi
 # -deskew: Straighten the image
 # -background white: Fill any new pixels from rotation with white
 # +repage: Reset the virtual canvas to eliminate negative offsets (fixes TIFF issues)
-convert "$INPUT" \
+$MAGICK_CMD "$INPUT" \
     -deskew "${THRESHOLD}%" \
     -background white \
     +repage \

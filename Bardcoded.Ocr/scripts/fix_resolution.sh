@@ -9,12 +9,21 @@
 #
 # ImageMagick commands:
 #   # Identify current DPI
-#   identify -format "%x %y" <input>
+#   magick identify -format "%x %y" <input>
 #   
 #   # Resample to 300 DPI (adjusts both pixels and density)
-#   convert <input> -resample 300 -units PixelsPerInch <output>
+#   magick <input> -resample 300 -units PixelsPerInch <output>
 
 set -e
+
+# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
+if command -v magick &> /dev/null; then
+    MAGICK_CMD="magick"
+    IDENTIFY_CMD="magick identify"
+else
+    MAGICK_CMD="convert"
+    IDENTIFY_CMD="identify"
+fi
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <input_image> <output_image> [target_dpi]"
@@ -32,12 +41,12 @@ if [ ! -f "$INPUT" ]; then
 fi
 
 # Get current DPI (returns "x_dpi y_dpi")
-CURRENT_DPI=$(identify -format "%x %y" "$INPUT" 2>/dev/null || echo "72 72")
+CURRENT_DPI=$($IDENTIFY_CMD -format "%x %y" "$INPUT" 2>/dev/null || echo "72 72")
 
 echo "Current DPI: $CURRENT_DPI"
 echo "Target DPI: $TARGET_DPI"
 
 # Resample to target DPI - this adjusts both the pixel dimensions and the density metadata
-convert "$INPUT" -resample "$TARGET_DPI" -units PixelsPerInch "$OUTPUT"
+$MAGICK_CMD "$INPUT" -resample "$TARGET_DPI" -units PixelsPerInch "$OUTPUT"
 
 echo "Fixed resolution to ${TARGET_DPI} DPI: $OUTPUT"

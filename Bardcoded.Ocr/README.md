@@ -92,7 +92,7 @@ brew install imagemagick
 
 **Verify installation:**
 ```bash
-convert --version
+magick --version
 ```
 
 #### Tesseract (Fallback OCR Engine)
@@ -371,25 +371,25 @@ If you prefer to run ImageMagick commands directly without the scripts:
 
 ```bash
 # Step 1: Convert to TIFF
-convert input.jpg -compress lzw step1.tiff
+magick input.jpg -compress lzw step1.tiff
 
 # Step 2: Fix resolution to 300 DPI
-convert step1.tiff -resample 300 -units PixelsPerInch step2.tiff
+magick step1.tiff -resample 300 -units PixelsPerInch step2.tiff
 
 # Step 3: Remove background
-convert step2.tiff -fuzz 10% -transparent white -background white -alpha remove -auto-level step3.tiff
+magick step2.tiff -fuzz 10% -transparent white -background white -alpha remove -auto-level step3.tiff
 
 # Step 4: Deskew
-convert step3.tiff -deskew 40% -background white step4.tiff
+magick step3.tiff -deskew 40% -background white step4.tiff
 
 # Step 5: Grayscale
-convert step4.tiff -colorspace Gray step5.tiff
+magick step4.tiff -colorspace Gray step5.tiff
 
 # Step 6: Enhance contrast
-convert step5.tiff -auto-level -sigmoidal-contrast 3x50% step6.tiff
+magick step5.tiff -auto-level -sigmoidal-contrast 3x50% step6.tiff
 
 # Step 7: Denoise
-convert step6.tiff -enhance final.tiff
+magick step6.tiff -enhance final.tiff
 ```
 
 #### All-in-One Command
@@ -397,7 +397,7 @@ convert step6.tiff -enhance final.tiff
 Run all preprocessing steps in a single ImageMagick command:
 
 ```bash
-convert input.jpg \
+magick input.jpg \
     -compress lzw \
     -resample 300 -units PixelsPerInch \
     -fuzz 10% -transparent white -background white -alpha remove -auto-level \
