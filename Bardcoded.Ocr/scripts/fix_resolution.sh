@@ -16,13 +16,14 @@
 
 set -e
 
-# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
-if command -v magick &> /dev/null; then
-    MAGICK_CMD="magick"
-    IDENTIFY_CMD="magick identify"
-else
-    MAGICK_CMD="convert"
-    IDENTIFY_CMD="identify"
+# Check if ImageMagick is installed
+if ! command -v magick &> /dev/null; then
+    echo "Error: ImageMagick is not installed."
+    echo "Please install ImageMagick:"
+    echo "  Ubuntu/Debian: sudo apt-get install imagemagick"
+    echo "  macOS: brew install imagemagick"
+    echo "  Windows: Download from https://imagemagick.org/script/download.php"
+    exit 1
 fi
 
 if [ $# -lt 2 ]; then
@@ -41,12 +42,12 @@ if [ ! -f "$INPUT" ]; then
 fi
 
 # Get current DPI (returns "x_dpi y_dpi")
-CURRENT_DPI=$($IDENTIFY_CMD -format "%x %y" "$INPUT" 2>/dev/null || echo "72 72")
+CURRENT_DPI=$(magick identify -format "%x %y" "$INPUT" 2>/dev/null || echo "72 72")
 
 echo "Current DPI: $CURRENT_DPI"
 echo "Target DPI: $TARGET_DPI"
 
 # Resample to target DPI - this adjusts both the pixel dimensions and the density metadata
-$MAGICK_CMD "$INPUT" -resample "$TARGET_DPI" -units PixelsPerInch "$OUTPUT"
+magick "$INPUT" -resample "$TARGET_DPI" -units PixelsPerInch "$OUTPUT"
 
 echo "Fixed resolution to ${TARGET_DPI} DPI: $OUTPUT"

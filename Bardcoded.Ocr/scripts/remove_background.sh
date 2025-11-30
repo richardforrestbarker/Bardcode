@@ -13,11 +13,14 @@
 
 set -e
 
-# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
-if command -v magick &> /dev/null; then
-    MAGICK_CMD="magick"
-else
-    MAGICK_CMD="convert"
+# Check if ImageMagick is installed
+if ! command -v magick &> /dev/null; then
+    echo "Error: ImageMagick is not installed."
+    echo "Please install ImageMagick:"
+    echo "  Ubuntu/Debian: sudo apt-get install imagemagick"
+    echo "  macOS: brew install imagemagick"
+    echo "  Windows: Download from https://imagemagick.org/script/download.php"
+    exit 1
 fi
 
 if [ $# -lt 2 ]; then
@@ -41,7 +44,7 @@ fi
 # -background white: Set background color for flatten
 # -alpha remove: Remove alpha channel by flattening to background
 # -auto-level: Stretch histogram to improve contrast
-$MAGICK_CMD "$INPUT" \
+magick "$INPUT" \
     -fuzz "${FUZZ_PERCENT}%" \
     -transparent white \
     -background white \

@@ -12,11 +12,14 @@
 
 set -e
 
-# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
-if command -v magick &> /dev/null; then
-    MAGICK_CMD="magick"
-else
-    MAGICK_CMD="convert"
+# Check if ImageMagick is installed
+if ! command -v magick &> /dev/null; then
+    echo "Error: ImageMagick is not installed."
+    echo "Please install ImageMagick:"
+    echo "  Ubuntu/Debian: sudo apt-get install imagemagick"
+    echo "  macOS: brew install imagemagick"
+    echo "  Windows: Download from https://imagemagick.org/script/download.php"
+    exit 1
 fi
 
 if [ $# -ne 2 ]; then
@@ -35,6 +38,6 @@ fi
 
 # Apply enhance filter for noise reduction
 # -enhance: Apply a digital filter to reduce noise
-$MAGICK_CMD "$INPUT" -enhance "$OUTPUT"
+magick "$INPUT" -enhance "$OUTPUT"
 
 echo "Applied denoising: $OUTPUT"

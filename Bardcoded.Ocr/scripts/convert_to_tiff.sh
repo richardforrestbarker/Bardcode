@@ -12,11 +12,14 @@
 
 set -e
 
-# Use 'magick' if available (ImageMagick 7+), otherwise fall back to 'convert' (ImageMagick 6)
-if command -v magick &> /dev/null; then
-    MAGICK_CMD="magick"
-else
-    MAGICK_CMD="convert"
+# Check if ImageMagick is installed
+if ! command -v magick &> /dev/null; then
+    echo "Error: ImageMagick is not installed."
+    echo "Please install ImageMagick:"
+    echo "  Ubuntu/Debian: sudo apt-get install imagemagick"
+    echo "  macOS: brew install imagemagick"
+    echo "  Windows: Download from https://imagemagick.org/script/download.php"
+    exit 1
 fi
 
 if [ $# -ne 2 ]; then
@@ -34,6 +37,6 @@ if [ ! -f "$INPUT" ]; then
 fi
 
 # Convert to TIFF with LZW compression for smaller file size while maintaining quality
-$MAGICK_CMD "$INPUT" -compress lzw "$OUTPUT"
+magick "$INPUT" -compress lzw "$OUTPUT"
 
 echo "Converted $INPUT to TIFF format: $OUTPUT"

@@ -78,23 +78,20 @@ class ImagePreprocessor:
     
     def _check_imagemagick(self):
         """Check if ImageMagick is installed and available."""
-        # Try 'magick' first (ImageMagick 7+), then 'convert' (ImageMagick 6)
-        for cmd in ["magick", "convert"]:
-            try:
-                result = subprocess.run(
-                    [cmd, "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    self._magick_cmd = cmd
-                    logger.debug(f"ImageMagick version: {result.stdout.split('\n')[0]}")
-                    return
-            except FileNotFoundError:
-                continue
-            except subprocess.TimeoutExpired:
-                continue
+        try:
+            result = subprocess.run(
+                ["magick", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.debug(f"ImageMagick version: {result.stdout.split('\n')[0]}")
+                return
+        except FileNotFoundError:
+            pass
+        except subprocess.TimeoutExpired:
+            pass
         
         raise RuntimeError(
             "ImageMagick is not installed. Please install it:\n"
@@ -149,7 +146,7 @@ class ImagePreprocessor:
         """
         Run an ImageMagick command directly.
         
-        Uses 'magick' (ImageMagick 7+) if available, otherwise 'convert' (ImageMagick 6).
+        Uses 'magick' command (ImageMagick 7+).
         
         Args:
             args: Arguments to pass to the ImageMagick command
@@ -158,7 +155,7 @@ class ImagePreprocessor:
             True if successful, False otherwise
         """
         try:
-            cmd = [self._magick_cmd] + args
+            cmd = ["magick"] + args
             logger.debug(f"Running: {' '.join(cmd)}")
             
             result = subprocess.run(

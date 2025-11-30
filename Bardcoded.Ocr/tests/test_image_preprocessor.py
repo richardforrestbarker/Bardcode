@@ -20,19 +20,15 @@ from src.preprocessing.image_preprocessor import ImagePreprocessor, SCRIPTS_DIR
 
 def imagemagick_available():
     """Check if ImageMagick is installed."""
-    # Try 'magick' first (ImageMagick 7+), then 'convert' (ImageMagick 6)
-    for cmd in ["magick", "convert"]:
-        try:
-            result = subprocess.run(
-                [cmd, "--version"],
-                capture_output=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                return True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    return False
+    try:
+        result = subprocess.run(
+            ["magick", "--version"],
+            capture_output=True,
+            timeout=10
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
 
 
 # Skip all tests if ImageMagick is not available
