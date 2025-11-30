@@ -1,2 +1,47 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
-*
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Model cache
+models/
+*.onnx
+*.pt
+*.pth
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+temp/
+tmp/
