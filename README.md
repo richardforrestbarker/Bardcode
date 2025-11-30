@@ -467,13 +467,13 @@ The Receipt OCR system uses a hybrid architecture:
 ### OCR Pipeline Stages
 
 1. **Image Preprocessing** (using ImageMagick CLI via shell scripts)
+   - Deskewing (rotation correction)
+   - Contrast enhancement
+   - Grayscale conversion
+   - Remove background
+   - Denoising
    - Convert to TIFF format (optimal for Tesseract)
    - Fix resolution to 300 DPI
-   - Remove background
-   - Deskewing (rotation correction)
-   - Grayscale conversion
-   - Contrast enhancement
-   - Denoising
 
 2. **Text Detection & OCR**
    - PaddleOCR (primary, high accuracy)
