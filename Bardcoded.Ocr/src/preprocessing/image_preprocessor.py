@@ -87,7 +87,7 @@ class ImagePreprocessor:
             )
             if result.returncode != 0:
                 raise RuntimeError("ImageMagick 'convert' command failed")
-            logger.debug(f"ImageMagick version: {result.stdout.split(chr(10))[0]}")
+            logger.debug(f"ImageMagick version: {result.stdout.split('\n')[0]}")
         except FileNotFoundError:
             raise RuntimeError(
                 "ImageMagick is not installed. Please install it:\n"
@@ -203,7 +203,7 @@ class ImagePreprocessor:
             logger.info(f"Step {step}: Converting to TIFF...")
             next_file = os.path.join(temp_dir, f"step{step}_tiff.tiff")
             if not self._run_imagemagick_cmd([current_file, "-compress", "lzw", next_file]):
-                raise RuntimeError("Failed to convert to TIFF")
+                raise RuntimeError(f"Failed to convert '{image_path}' to TIFF")
             current_file = next_file
             if self.debug_manager:
                 self._save_debug_image(current_file, "tiff_converted", page_num)
@@ -216,7 +216,7 @@ class ImagePreprocessor:
                 current_file, "-resample", str(self.target_dpi), 
                 "-units", "PixelsPerInch", next_file
             ]):
-                raise RuntimeError("Failed to fix resolution")
+                raise RuntimeError(f"Failed to fix resolution to {self.target_dpi} DPI")
             current_file = next_file
             if self.debug_manager:
                 self._save_debug_image(current_file, "resolution_fixed", page_num)

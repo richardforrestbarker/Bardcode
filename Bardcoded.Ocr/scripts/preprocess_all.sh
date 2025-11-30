@@ -90,7 +90,7 @@ fi
 
 # Create temp directory for intermediate files
 TEMP_DIR=$(mktemp -d)
-trap "if [ '$KEEP_INTERMEDIATES' = false ]; then rm -rf '$TEMP_DIR'; fi" EXIT
+trap "if [ '$KEEP_INTERMEDIATES' = false ]; then rm -rf '$TEMP_DIR' 2>/dev/null || true; fi" EXIT
 
 echo "Starting preprocessing pipeline..."
 echo "Input: $INPUT"
