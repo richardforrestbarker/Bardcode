@@ -70,6 +70,31 @@ pip install paddleocr
 
 PaddleOCR will automatically download required models on first use.
 
+#### ImageMagick (Required - Image Preprocessing)
+
+ImageMagick is required for the image preprocessing pipeline. It provides optimal image processing for best OCR accuracy.
+
+**On Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install imagemagick
+```
+
+**On macOS:**
+```bash
+brew install imagemagick
+```
+
+**On Windows:**
+1. Download the installer from: https://imagemagick.org/script/download.php
+2. Run the installer and select "Install development headers and libraries for C and C++"
+3. Add ImageMagick to your PATH environment variable (the installer can do this automatically)
+
+**Verify installation:**
+```bash
+convert --version
+```
+
 #### Tesseract (Fallback OCR Engine)
 
 **On Ubuntu/Debian:**
@@ -292,12 +317,96 @@ postprocessing:
 
 ### Pipeline Stages
 
-1. **Image Preprocessing**: Denoise, deskew, normalize DPI
+1. **Image Preprocessing** (via ImageMagick):
+   - Convert to TIFF
+   - Fix resolution (300 DPI)
+   - Remove background
+   - Deskew
+   - Grayscale
+   - Contrast enhancement
+   - Denoise
 2. **Text Detection**: PaddleOCR detector finds text regions
 3. **OCR**: PaddleOCR recognizer extracts text with bounding boxes
 4. **Tokenization**: Split text into model tokens, map to boxes
 5. **Model Inference**: LayoutLMv3 identifies field types and entities
 6. **Postprocessing**: Parse values, verify totals, merge multi-page results
+
+### Manual Image Preprocessing
+
+You can run the preprocessing steps manually using ImageMagick before calling the CLI. This is useful for debugging or customizing the preprocessing pipeline.
+
+Shell scripts are provided in the `scripts/` directory for each preprocessing step:
+
+```bash
+# Run all preprocessing steps at once
+./scripts/preprocess_all.sh input.jpg output.tiff
+
+# Or run steps individually:
+
+# Step 1: Convert to TIFF (optimal format for Tesseract)
+./scripts/convert_to_tiff.sh input.jpg step1.tiff
+
+# Step 2: Fix resolution to 300 DPI
+./scripts/fix_resolution.sh step1.tiff step2.tiff 300
+
+# Step 3: Remove background
+./scripts/remove_background.sh step2.tiff step3.tiff
+
+# Step 4: Deskew (straighten the image)
+./scripts/deskew.sh step3.tiff step4.tiff
+
+# Step 5: Convert to grayscale
+./scripts/grayscale.sh step4.tiff step5.tiff
+
+# Step 6: Enhance contrast
+./scripts/enhance_contrast.sh step5.tiff step6.tiff
+
+# Step 7: Denoise
+./scripts/denoise.sh step6.tiff final.tiff
+```
+
+#### Direct ImageMagick Commands
+
+If you prefer to run ImageMagick commands directly without the scripts:
+
+```bash
+# Step 1: Convert to TIFF
+convert input.jpg -compress lzw step1.tiff
+
+# Step 2: Fix resolution to 300 DPI
+convert step1.tiff -resample 300 -units PixelsPerInch step2.tiff
+
+# Step 3: Remove background
+convert step2.tiff -fuzz 10% -transparent white -background white -alpha remove -auto-level step3.tiff
+
+# Step 4: Deskew
+convert step3.tiff -deskew 40% -background white step4.tiff
+
+# Step 5: Grayscale
+convert step4.tiff -colorspace Gray step5.tiff
+
+# Step 6: Enhance contrast
+convert step5.tiff -auto-level -sigmoidal-contrast 3x50% step6.tiff
+
+# Step 7: Denoise
+convert step6.tiff -enhance final.tiff
+```
+
+#### All-in-One Command
+
+Run all preprocessing steps in a single ImageMagick command:
+
+```bash
+convert input.jpg \
+    -compress lzw \
+    -resample 300 -units PixelsPerInch \
+    -fuzz 10% -transparent white -background white -alpha remove -auto-level \
+    -deskew 40% -background white \
+    -colorspace Gray \
+    -auto-level -sigmoidal-contrast 3x50% \
+    -enhance \
+    output.tiff
+```
 
 ### Token-to-Box Mapping
 

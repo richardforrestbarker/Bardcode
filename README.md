@@ -466,7 +466,7 @@ The Receipt OCR system uses a hybrid architecture:
 
 ### OCR Pipeline Stages
 
-1. **Image Preprocessing** (using ImageMagick via Wand for optimal results)
+1. **Image Preprocessing** (using ImageMagick CLI via shell scripts)
    - Convert to TIFF format (optimal for Tesseract)
    - Fix resolution to 300 DPI
    - Remove background
@@ -536,11 +536,11 @@ Windows: Download from [Tesseract GitHub](https://github.com/UB-Mannheim/tessera
 
 **ImageMagick** (required for image preprocessing):
 
-ImageMagick is used for optimal image preprocessing to improve OCR accuracy. The Python Wand library provides bindings to ImageMagick.
+ImageMagick CLI is used for optimal image preprocessing to improve OCR accuracy.
 
 Ubuntu/Debian:
 ```bash
-sudo apt-get install imagemagick libmagickwand-dev
+sudo apt-get install imagemagick
 ```
 
 macOS:
@@ -552,9 +552,13 @@ Windows:
 1. Download the ImageMagick installer from [ImageMagick Downloads](https://imagemagick.org/script/download.php#windows)
 2. During installation, ensure you check the option "Install development headers and libraries for C and C++"
 3. Add ImageMagick to your system PATH
-4. Set the `MAGICK_HOME` environment variable to your ImageMagick installation directory
 
-After installing ImageMagick, the Python Wand package will be installed automatically via `pip install -r requirements.txt`.
+Verify installation:
+```bash
+convert --version
+```
+
+See `Bardcoded.Ocr/README.md` for details on using the preprocessing scripts manually.
 
 ### Using the OCR Feature
 
