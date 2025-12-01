@@ -425,17 +425,11 @@ class ImagePreprocessor:
             
             # Load the final preprocessed image using ImageMagick to convert to RGB PNG
             # This avoids using Pillow for loading the TIFF
-            logger.info("Loading preprocessed image...")
-            final_png = os.path.join(temp_dir, "final_rgb.png")
-            if not self._run_imagemagick_cmd([
-                current_file, "-colorspace", "sRGB", "-type", "TrueColor", final_png
-            ]):
-                raise RuntimeError("Failed to convert final image to RGB")
-            
+            logger.info("Finished preprocessing image, prepaering for OCR")
             # Now load the PNG as numpy array - we need Pillow here for numpy conversion
             # This is the minimal Pillow usage required for OCR engine compatibility
             from PIL import Image
-            pil_img = Image.open(final_png)
+            pil_img = Image.open(current_file)
             result = np.array(pil_img)
             
             # Get final dimensions

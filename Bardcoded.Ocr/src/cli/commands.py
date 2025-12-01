@@ -112,7 +112,7 @@ def process_command(
             
             
             # Preprocess image (with debug output if enabled)
-            processed_image = preprocessor.preprocess(image_path, page_num=page_num + 1)
+            (processed_image, img_width, img_height) = preprocessor.preprocess(image_path, page_num=page_num + 1)
             
             # Run OCR
             words = ocr.detect_and_recognize(processed_image)
