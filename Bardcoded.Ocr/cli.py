@@ -49,6 +49,7 @@ def main():
                 image_paths=args.images,
                 output_path=args.output,
                 model_name=args.model,
+                model_type=args.model_type,
                 ocr_engine=args.ocr_engine,
                 device=args.device,
                 denoise=args.denoise,

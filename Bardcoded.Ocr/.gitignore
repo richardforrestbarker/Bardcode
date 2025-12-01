@@ -31,8 +31,8 @@ build/
 htmlcov/
 .tox/
 
-# Model cache
-models/
+# Model cache (downloaded models, not source code)
+/models/
 *.onnx
 *.pt
 *.pth

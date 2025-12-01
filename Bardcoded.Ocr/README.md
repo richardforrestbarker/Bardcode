@@ -1,6 +1,6 @@
 # Receipt OCR Service
 
-Python-based receipt OCR service using PaddleOCR and LayoutLMv3 for structured data extraction.
+Python-based receipt OCR service using PaddleOCR and open-source models (Donut, IDEFICS2) for structured data extraction.
 
 ## Python Requirements
 
@@ -11,15 +11,26 @@ Python-based receipt OCR service using PaddleOCR and LayoutLMv3 for structured d
 
 This service provides OCR and structured field extraction from receipt images using:
 - **PaddleOCR (PP-StructureV3)**: Text detection and recognition
-- **LayoutLMv3**: Layout-aware field extraction (vendor, date, total, line items, etc.)
+- **Donut (default)**: OCR-free document understanding transformer (MIT license)
+- **IDEFICS2**: Multimodal vision-language model (Apache 2.0 license)
+- **LayoutLMv3**: Layout-aware field extraction (requires OCR first)
 
 ## Features
 
 - Multi-page receipt processing
 - Token-to-bounding-box mapping
-- Configurable model selection (LayoutLMv3, LayoutLMv2, Donut)
+- Configurable model selection (Donut, IDEFICS2, LayoutLMv3)
 - GPU acceleration with CPU fallback
 - CLI interface for integration with .NET API
+- Open-source models with permissive licenses
+
+## Supported Models
+
+| Model | License | OCR Required | Memory | Best For |
+|-------|---------|--------------|--------|----------|
+| Donut | MIT | No | ~2GB | Fast processing, receipt-specific |
+| IDEFICS2 | Apache 2.0 | No | ~16GB (4-bit: ~6GB) | High accuracy, flexible |
+| LayoutLMv3 | - | Yes | ~2GB | Token classification tasks |
 
 ## Setup
 
@@ -119,39 +130,42 @@ pip install pytesseract
    pip install pytesseract
    ```
 
-### Downloading LayoutLMv3 Models
+### Downloading Models
 
-The LayoutLMv3 model is automatically downloaded from HuggingFace on first use. However, you can pre-download it:
+Models are automatically downloaded from HuggingFace on first use. You can also pre-download them:
 
-**Option 1: Using HuggingFace CLI (Recommended)**
+#### Donut (Default - Recommended)
+
+Donut is an OCR-free document understanding model with MIT license.
+
 ```bash
-# Install HuggingFace Hub CLI
-pip install huggingface_hub
+# Using HuggingFace CLI
+huggingface-cli download naver-clova-ix/donut-base-finetuned-cord-v2 --local-dir ./models/donut-cord-v2
 
-# Download the base model
+# Or using Python
+from transformers import DonutProcessor, VisionEncoderDecoderModel
+processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+```
+
+#### IDEFICS2
+
+IDEFICS2 is a multimodal vision-language model with Apache 2.0 license. Requires more GPU memory.
+
+```bash
+# Using HuggingFace CLI
+huggingface-cli download HuggingFaceM4/idefics2-8b --local-dir ./models/idefics2-8b
+
+# For 4-bit quantized version (lower memory)
+huggingface-cli download HuggingFaceM4/idefics2-8b-AWQ --local-dir ./models/idefics2-8b-awq
+```
+
+#### LayoutLMv3 (Legacy)
+
+LayoutLMv3 requires OCR to be run first.
+
+```bash
 huggingface-cli download microsoft/layoutlmv3-base --local-dir ./models/layoutlmv3-base
-
-# Or download a fine-tuned receipt model (if available)
-huggingface-cli download your-username/layoutlmv3-receipts --local-dir ./models/layoutlmv3-receipts
-```
-
-**Option 2: Using Python**
-```python
-from transformers import AutoProcessor, AutoModelForTokenClassification
-
-# Download and cache the model
-model_name = "microsoft/layoutlmv3-base"
-processor = AutoProcessor.from_pretrained(model_name)
-model = AutoModelForTokenClassification.from_pretrained(model_name)
-
-# Optionally save to local directory
-processor.save_pretrained("./models/layoutlmv3-base")
-model.save_pretrained("./models/layoutlmv3-base")
-```
-
-**Option 3: Manual Download**
-1. Visit https://huggingface.co/microsoft/layoutlmv3-base
-2. Download all files to `./models/layoutlmv3-base`
 3. Use the local path when running the CLI:
    ```bash
    python cli.py process --image receipt.jpg --model ./models/layoutlmv3-base
@@ -179,7 +193,7 @@ python cli.py version
 
 ### Command-line Interface
 
-Process a single receipt:
+Process a single receipt (uses Donut by default):
 
 ```bash
 python cli.py process --image path/to/receipt.jpg --output result.json
@@ -191,10 +205,23 @@ Process multiple pages:
 python cli.py process --image page1.jpg --image page2.jpg --output result.json
 ```
 
-Configure OCR engine and model:
+Use a specific model type:
 
 ```bash
-python cli.py process --image receipt.jpg --output result.json --ocr-engine paddle --model microsoft/layoutlmv3-base --device cuda
+# Use Donut (default, OCR-free, MIT license)
+python cli.py process --image receipt.jpg --output result.json --model-type donut
+
+# Use IDEFICS2 (multimodal, Apache 2.0 license, requires more GPU memory)
+python cli.py process --image receipt.jpg --output result.json --model-type idefics2 --device cuda
+
+# Use LayoutLMv3 (requires OCR first)
+python cli.py process --image receipt.jpg --output result.json --model-type layoutlmv3 --model microsoft/layoutlmv3-base
+```
+
+Configure OCR engine and device:
+
+```bash
+python cli.py process --image receipt.jpg --output result.json --ocr-engine paddle --device cuda
 ```
 
 ### Debug Mode
@@ -234,7 +261,8 @@ The debug output helps diagnose issues in the processing pipeline:
 from src.receipt_processor import ReceiptProcessor
 
 processor = ReceiptProcessor(
-    model_name="microsoft/layoutlmv3-base",
+    model_name="naver-clova-ix/donut-base-finetuned-cord-v2",
+    model_type="donut",
     ocr_engine="paddle",
     device="cuda"
 )
@@ -249,7 +277,8 @@ Configuration file: `config/config.yaml`
 
 ```yaml
 model:
-  name_or_path: "microsoft/layoutlmv3-base"
+  name_or_path: "naver-clova-ix/donut-base-finetuned-cord-v2"
+  type: "donut"  # donut, idefics2, or layoutlmv3
   device: "auto"  # auto, cuda, cpu
   
 ocr:

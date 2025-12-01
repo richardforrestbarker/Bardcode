@@ -40,8 +40,18 @@ def create_argument_parser() -> argparse.ArgumentParser:
     process_parser.add_argument(
         "--model",
         "-m",
-        default="microsoft/layoutlmv3-base",
-        help="Model name or path (default: microsoft/layoutlmv3-base)"
+        default="naver-clova-ix/donut-base-finetuned-cord-v2",
+        help="Model name or path (default: naver-clova-ix/donut-base-finetuned-cord-v2)"
+    )
+    process_parser.add_argument(
+        "--model-type",
+        choices=["donut", "idefics2", "layoutlmv3"],
+        default="donut",
+        help="""Model type to use for field extraction (default: donut).
+Types:
+  donut: OCR-free document understanding (MIT license, fast, recommended)
+  idefics2: Multimodal vision-language model (Apache 2.0, high quality)
+  layoutlmv3: Layout-aware token classification (requires OCR first)"""
     )
     process_parser.add_argument(
         "--ocr-engine",
