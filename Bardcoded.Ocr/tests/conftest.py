@@ -92,6 +92,43 @@ def sample_ocr_result():
 
 
 @pytest.fixture
+def sample_ocr_result_file(sample_ocr_result, tmp_path):
+    """Save sample OCR result to a temporary file and return path."""
+    result_path = tmp_path / "ocr_result.json"
+    with open(result_path, 'w') as f:
+        json.dump(sample_ocr_result, f)
+    return str(result_path)
+
+
+@pytest.fixture
+def sample_ocr_command_result():
+    """Sample result from the ocr command."""
+    return {
+        "job_id": "test-ocr-001",
+        "status": "done",
+        "input_image": "/path/to/image.png",
+        "ocr_engine": "paddle",
+        "words": [
+            {"text": "GROCERY", "box": {"x0": 250, "y0": 83, "x1": 750, "y1": 166}, "confidence": 0.98},
+            {"text": "Total", "box": {"x0": 125, "y0": 900, "x1": 325, "y1": 950}, "confidence": 0.98},
+            {"text": "$7.01", "box": {"x0": 750, "y0": 900, "x1": 950, "y1": 950}, "confidence": 0.97},
+        ],
+        "raw_ocr_text": "GROCERY Total $7.01",
+        "image_width": 400,
+        "image_height": 600
+    }
+
+
+@pytest.fixture
+def sample_ocr_command_result_file(sample_ocr_command_result, tmp_path):
+    """Save sample OCR command result to a temporary file and return path."""
+    result_path = tmp_path / "ocr_command_result.json"
+    with open(result_path, 'w') as f:
+        json.dump(sample_ocr_command_result, f)
+    return str(result_path)
+
+
+@pytest.fixture
 def mock_paddleocr():
     """Mock PaddleOCR for testing without actual model."""
     try:

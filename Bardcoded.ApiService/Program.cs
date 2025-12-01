@@ -1,13 +1,12 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Providers;
 using Bardcoded.ApiService.Controllers;
+using Bardcoded.ApiService.Ocr;
 using Bardcoded.Data;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FeatureManagement;
-using Microsoft.OpenApi.Validations;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,7 +22,7 @@ var connectionString = builder.Configuration.GetConnectionString("Barcode") ?? "
 var corsconfig = builder.Configuration.GetRequiredSection("Cors").Get<Dictionary<string, CorsPolicy>>();
 
 var integrations = builder.Configuration.GetRequiredSection("Application:Integrations").Get<IEnumerable<ApiProviderConfiguration>>();
-if (!integrations.Any())
+if (!integrations?.Any() ?? true)
 {
     Console.WriteLine("No API provider configs found. If the feature is on, it still won't work.");
 }
@@ -56,10 +55,13 @@ builder.Services.AddDbContext<IBarcodeDataContext, BarcodeDataContext>(options =
 builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
 
-// Configure OCR settings
+// Configure OCR settings (legacy receipt processor)
 var ocrConfig = builder.Configuration.GetSection("Ocr").Get<OcrConfiguration>() ?? new OcrConfiguration();
 builder.Services.AddSingleton(ocrConfig);
 builder.Services.AddSingleton<IReceiptProcessor, ReceiptProcessor>();
+
+// Add OCR document processing services (isolated for future extraction)
+builder.Services.AddOcrDocumentProcessing(builder.Configuration);
 
 builder.Services.AddCors();
 

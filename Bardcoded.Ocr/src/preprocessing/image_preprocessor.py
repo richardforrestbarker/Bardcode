@@ -72,7 +72,7 @@ class ImagePreprocessor:
     
     def __init__(
         self,
-        target_dpi: int = 300,
+        target_dpi: Optional[int] = 300,
         denoise: bool = True,
         deskew: bool = True,
         enhance_contrast: bool = True,
@@ -87,7 +87,8 @@ class ImagePreprocessor:
         Initialize preprocessor.
         
         Args:
-            target_dpi: Target DPI for resolution normalization (default 300)
+            target_dpi: Target DPI for resolution normalization (default 300). 
+                        Set to None to skip DPI resampling (for preprocess-only phase).
             denoise: Whether to apply denoising
             deskew: Whether to correct skew
             enhance_contrast: Whether to enhance contrast
@@ -432,31 +433,34 @@ class ImagePreprocessor:
             self._save_debug_image(next_file, "convert", page_num)
             step += 1
             
-            # Step 7: Fix resolution (with size limit checking)
-            logger.info(f"Step {step}: Checking resolution...")
-            width, height, x_dpi, y_dpi = self._get_image_info(current_file)
-            current_dpi = min(x_dpi, y_dpi) if x_dpi > 0 and y_dpi > 0 else 72.0
-            
-            logger.info(f"Current image: {width}x{height} at {current_dpi:.0f} DPI")
-            
-            # Find a safe DPI that won't exceed Tesseract/Pillow limits
-            safe_dpi = self._find_safe_dpi(width, height, current_dpi)
-            
-            if safe_dpi is not None:
-                logger.info(f"Step {step}: Fixing resolution to {safe_dpi} DPI...")
-                next_file = os.path.join(temp_dir, f"step{step}_resolution.tiff")
-                if not self._run_imagemagick_cmd([
-                    current_file, "-resample", str(safe_dpi), 
-                    "-units", "PixelsPerInch", next_file
-                ]):
-                    raise RuntimeError(f"Failed to fix resolution to {safe_dpi} DPI")
-                current_file = next_file
-                self._save_debug_image(next_file, "resolution_fixed", page_num)
+            # Step 7: Fix resolution (with size limit checking) - only if target_dpi is set
+            if self.target_dpi is not None:
+                logger.info(f"Step {step}: Checking resolution...")
+                width, height, x_dpi, y_dpi = self._get_image_info(current_file)
+                current_dpi = min(x_dpi, y_dpi) if x_dpi > 0 and y_dpi > 0 else 72.0
+                
+                logger.info(f"Current image: {width}x{height} at {current_dpi:.0f} DPI")
+                
+                # Find a safe DPI that won't exceed Tesseract/Pillow limits
+                safe_dpi = self._find_safe_dpi(width, height, current_dpi)
+                
+                if safe_dpi is not None:
+                    logger.info(f"Step {step}: Fixing resolution to {safe_dpi} DPI...")
+                    next_file = os.path.join(temp_dir, f"step{step}_resolution.tiff")
+                    if not self._run_imagemagick_cmd([
+                        current_file, "-resample", str(safe_dpi), 
+                        "-units", "PixelsPerInch", next_file
+                    ]):
+                        raise RuntimeError(f"Failed to fix resolution to {safe_dpi} DPI")
+                    current_file = next_file
+                    self._save_debug_image(next_file, "resolution_fixed", page_num)
+                else:
+                    logger.warning(
+                        f"Skipping resolution adjustment - image at {current_dpi:.0f} DPI "
+                        f"would exceed size limits at any higher DPI"
+                    )
             else:
-                logger.warning(
-                    f"Skipping resolution adjustment - image at {current_dpi:.0f} DPI "
-                    f"would exceed size limits at any higher DPI"
-                )
+                logger.info("Skipping DPI resampling (preprocess-only mode)")
             
             # Load the final preprocessed image using ImageMagick to convert to RGB PNG
             # This avoids using Pillow for loading the TIFF
