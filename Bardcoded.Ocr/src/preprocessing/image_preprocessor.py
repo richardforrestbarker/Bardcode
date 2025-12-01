@@ -39,6 +39,9 @@ SCRIPTS_DIR = Path(__file__).parent.parent.parent / "scripts"
 # Tesseract maximum image dimension (32767 pixels)
 TESSERACT_MAX_DIMENSION = 32767
 
+# Pillow maximum pixel count (178956970 pixels) - to prevent DOS attacks
+PILLOW_MAX_PIXELS = 178956970
+
 
 class ImagePreprocessor:
     """
@@ -257,10 +260,14 @@ class ImagePreprocessor:
         current_dpi: float
     ) -> Optional[int]:
         """
-        Find a safe DPI that won't exceed Tesseract's size limits.
+        Find a safe DPI that won't exceed Tesseract's or Pillow's size limits.
         
         Tries target_dpi first, then reduces in increments of 50 down to 100 DPI.
         Returns None if even 100 DPI would exceed limits.
+        
+        Checks:
+        - Tesseract max dimension: 32767 pixels per dimension
+        - Pillow max pixels: 178956970 total pixels (to prevent DOS attacks)
         
         Args:
             width: Current width in pixels
@@ -276,22 +283,30 @@ class ImagePreprocessor:
                 width, height, current_dpi, test_dpi
             )
             
-            if new_width <= TESSERACT_MAX_DIMENSION and new_height <= TESSERACT_MAX_DIMENSION:
+            # Check both Tesseract dimension limit and Pillow pixel limit
+            total_pixels = new_width * new_height
+            within_tesseract_limit = (
+                new_width <= TESSERACT_MAX_DIMENSION and 
+                new_height <= TESSERACT_MAX_DIMENSION
+            )
+            within_pillow_limit = total_pixels <= PILLOW_MAX_PIXELS
+            
+            if within_tesseract_limit and within_pillow_limit:
                 if test_dpi != self.target_dpi:
                     logger.info(
                         f"Reduced target DPI from {self.target_dpi} to {test_dpi} "
-                        f"to stay within Tesseract limits ({new_width}x{new_height})"
+                        f"to stay within limits ({new_width}x{new_height} = {total_pixels} pixels)"
                     )
                 return test_dpi
         
         # Even 100 DPI is too large
         logger.warning(
-            f"Image would exceed Tesseract limits even at 100 DPI. "
+            f"Image would exceed size limits even at 100 DPI. "
             f"Skipping resolution adjustment."
         )
         return None
     
-    def preprocess(self, image_path: str, page_num: int = 1) -> np.ndarray:
+    def preprocess(self, image_path: str, page_num: int = 1) -> Tuple[np.ndarray, int, int]:
         """
         Preprocess image for OCR using ImageMagick CLI.
         
@@ -303,7 +318,7 @@ class ImagePreprocessor:
             page_num: Page number for debug output
             
         Returns:
-            Preprocessed image as numpy array (RGB)
+            Tuple of (preprocessed image as numpy array (RGB), width, height)
         """
         logger.info(f"Preprocessing image: {image_path}")
         
@@ -323,7 +338,7 @@ class ImagePreprocessor:
                 ]):
                     raise RuntimeError("Failed to deskew")
                 current_file = next_file
-                self._save_debug_image(current_file, "deskewed", page_num)
+                self._save_debug_image(next_file, "deskewed", page_num)
                 step += 1
             
             # Step 2: Contrast enhancement (optional)
@@ -335,7 +350,7 @@ class ImagePreprocessor:
                 ]):
                     raise RuntimeError("Failed to enhance contrast")
                 current_file = next_file
-                self._save_debug_image(current_file, "contrast_enhanced", page_num)
+                self._save_debug_image(next_file, "contrast_enhanced", page_num)
                 step += 1
             
             # Step 3: Grayscale
@@ -346,7 +361,7 @@ class ImagePreprocessor:
             ]):
                 raise RuntimeError("Failed to convert to grayscale")
             current_file = next_file
-            self._save_debug_image(current_file, "grayscale", page_num)
+            self._save_debug_image(next_file, "grayscale", page_num)
             step += 1
             
             # Step 4: Remove background
@@ -358,7 +373,7 @@ class ImagePreprocessor:
             ]):
                 raise RuntimeError("Failed to remove background")
             current_file = next_file
-            self._save_debug_image(current_file, "background_removed", page_num)
+            self._save_debug_image(next_file, "background_removed", page_num)
             step += 1
             
             # Step 5: Denoise (optional)
@@ -370,7 +385,7 @@ class ImagePreprocessor:
                 ]):
                     raise RuntimeError("Failed to denoise")
                 current_file = next_file
-                self._save_debug_image(current_file, "denoised", page_num)
+                self._save_debug_image(next_file, "denoised", page_num)
                 step += 1
             
             # Step 6: Convert to TIFF
@@ -379,7 +394,7 @@ class ImagePreprocessor:
             if not self._run_imagemagick_cmd([current_file, "-compress", "lzw", next_file]):
                 raise RuntimeError(f"Failed to convert to TIFF")
             current_file = next_file
-            self._save_debug_image(current_file, "tiff_converted", page_num)
+            self._save_debug_image(next_file, "tiff_converted", page_num)
             step += 1
             
             # Step 7: Fix resolution (with size limit checking)
@@ -389,7 +404,7 @@ class ImagePreprocessor:
             
             logger.info(f"Current image: {width}x{height} at {current_dpi:.0f} DPI")
             
-            # Find a safe DPI that won't exceed Tesseract limits
+            # Find a safe DPI that won't exceed Tesseract/Pillow limits
             safe_dpi = self._find_safe_dpi(width, height, current_dpi)
             
             if safe_dpi is not None:
@@ -401,11 +416,11 @@ class ImagePreprocessor:
                 ]):
                     raise RuntimeError(f"Failed to fix resolution to {safe_dpi} DPI")
                 current_file = next_file
-                self._save_debug_image(current_file, "resolution_fixed", page_num)
+                self._save_debug_image(next_file, "resolution_fixed", page_num)
             else:
                 logger.warning(
                     f"Skipping resolution adjustment - image at {current_dpi:.0f} DPI "
-                    f"would exceed Tesseract limits at any higher DPI"
+                    f"would exceed size limits at any higher DPI"
                 )
             
             # Load the final preprocessed image using ImageMagick to convert to RGB PNG
@@ -423,6 +438,9 @@ class ImagePreprocessor:
             pil_img = Image.open(final_png)
             result = np.array(pil_img)
             
+            # Get final dimensions
+            final_height, final_width = result.shape[:2]
+            
             # Ensure RGB format
             if len(result.shape) == 2:
                 # Grayscale, convert to RGB
@@ -435,26 +453,39 @@ class ImagePreprocessor:
             if self.debug_manager:
                 self.debug_manager.save_preprocessed_image(result, page_num)
             
-            logger.info("Preprocessing complete")
-            return result
+            logger.info(f"Preprocessing complete: {final_width}x{final_height}")
+            return result, final_width, final_height
             
         finally:
             # Clean up temp directory
             shutil.rmtree(temp_dir, ignore_errors=True)
     
     def _save_debug_image(self, image_path: str, step_name: str, page_num: int):
-        """Save a debug image for the current step using ImageMagick."""
+        """Save a debug image for the current step.
+        
+        Copies the image file directly to the debug output job folder to preserve 
+        the original format and avoid unintended conversions.
+        """
         if not self.debug_manager:
             return
         try:
-            # Use ImageMagick to copy the debug image instead of Pillow
-            debug_path = os.path.join(
-                self.debug_manager.output_dir if hasattr(self.debug_manager, 'output_dir') else tempfile.gettempdir(),
-                f"page_{page_num}_{step_name}.png"
+            # Get the original file extension to preserve format
+            _, ext = os.path.splitext(image_path)
+            if not ext:
+                ext = ".tiff"
+            
+            # Use job_dir from debug manager (the proper job folder)
+            debug_dir = self.debug_manager.job_dir if hasattr(self.debug_manager, 'job_dir') else (
+                self.debug_manager.output_dir if hasattr(self.debug_manager, 'output_dir') else tempfile.gettempdir()
             )
             
-            # Convert to PNG for debug output
-            self._run_imagemagick_cmd([image_path, debug_path])
+            debug_path = os.path.join(
+                str(debug_dir),
+                f"page_{page_num}_{step_name}{ext}"
+            )
+            
+            # Copy the file directly to preserve format (no conversion)
+            shutil.copy2(image_path, debug_path)
             logger.debug(f"Saved debug image: {debug_path}")
         except Exception as e:
             logger.warning(f"Failed to save debug image for {step_name}: {e}")

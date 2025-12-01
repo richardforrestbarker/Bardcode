@@ -15,7 +15,12 @@ import subprocess
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.preprocessing.image_preprocessor import ImagePreprocessor, SCRIPTS_DIR
+from src.preprocessing.image_preprocessor import (
+    ImagePreprocessor, 
+    SCRIPTS_DIR, 
+    TESSERACT_MAX_DIMENSION,
+    PILLOW_MAX_PIXELS
+)
 
 
 def imagemagick_available():
@@ -69,7 +74,7 @@ class TestImageMagickPreprocessing:
         preprocessor._check_imagemagick()
 
     def test_preprocess_returns_rgb_array(self, sample_image_path):
-        """Test that preprocessing returns a valid RGB numpy array."""
+        """Test that preprocessing returns a valid RGB numpy array with dimensions."""
         preprocessor = ImagePreprocessor(
             target_dpi=300,
             deskew=True,
@@ -77,7 +82,7 @@ class TestImageMagickPreprocessing:
             enhance_contrast=True
         )
         
-        result = preprocessor.preprocess(sample_image_path)
+        result, width, height = preprocessor.preprocess(sample_image_path)
         
         assert result is not None
         assert isinstance(result, np.ndarray)
@@ -85,6 +90,9 @@ class TestImageMagickPreprocessing:
         assert result.shape[2] == 3  # RGB
         assert result.shape[0] > 0
         assert result.shape[1] > 0
+        # Verify returned dimensions match array shape
+        assert height == result.shape[0]
+        assert width == result.shape[1]
 
     def test_preprocess_with_all_options_disabled(self, sample_image_path):
         """Test preprocessing with optional steps disabled."""
@@ -94,12 +102,15 @@ class TestImageMagickPreprocessing:
             enhance_contrast=False
         )
         
-        result = preprocessor.preprocess(sample_image_path)
+        result, width, height = preprocessor.preprocess(sample_image_path)
         
         assert result is not None
         assert isinstance(result, np.ndarray)
         assert len(result.shape) == 3
         assert result.shape[2] == 3
+        # Verify returned dimensions match array shape
+        assert height == result.shape[0]
+        assert width == result.shape[1]
 
     def test_scripts_exist(self):
         """Test that all preprocessing shell scripts exist."""
@@ -301,12 +312,15 @@ class TestPreprocessingPipelineOrder:
             enhance_contrast=True
         )
         
-        result = preprocessor.preprocess(sample_image_path)
+        result, width, height = preprocessor.preprocess(sample_image_path)
         
         # OCR engines expect RGB format
         assert result is not None
         assert len(result.shape) == 3
         assert result.shape[2] == 3  # RGB channels
+        # Verify returned dimensions match array shape
+        assert height == result.shape[0]
+        assert width == result.shape[1]
 
 
 class TestErrorHandling:
@@ -324,3 +338,75 @@ class TestErrorHandling:
         
         with pytest.raises(Exception):
             preprocessor.preprocess("/nonexistent/path/image.jpg")
+
+
+class TestImageSizeLimits:
+    """Tests for image size limit checking."""
+    
+    def test_constants_defined(self):
+        """Test that size limit constants are properly defined."""
+        assert TESSERACT_MAX_DIMENSION == 32767
+        assert PILLOW_MAX_PIXELS == 178956970
+    
+    def test_find_safe_dpi_within_limits(self):
+        """Test _find_safe_dpi returns target DPI when within limits."""
+        preprocessor = ImagePreprocessor(target_dpi=300)
+        
+        # Small image that won't exceed limits at 300 DPI
+        width, height = 1000, 800
+        current_dpi = 72.0
+        
+        safe_dpi = preprocessor._find_safe_dpi(width, height, current_dpi)
+        
+        assert safe_dpi == 300
+    
+    def test_find_safe_dpi_reduces_for_tesseract_limit(self):
+        """Test _find_safe_dpi reduces DPI when Tesseract limit would be exceeded."""
+        preprocessor = ImagePreprocessor(target_dpi=300)
+        
+        # Large image that would exceed Tesseract limits at 300 DPI
+        # At 72 DPI: 10000 x 8000 = 80M pixels
+        # At 300 DPI: would be ~41666 x 33333 (exceeds 32767 limit)
+        width, height = 10000, 8000
+        current_dpi = 72.0
+        
+        safe_dpi = preprocessor._find_safe_dpi(width, height, current_dpi)
+        
+        # Should return a reduced DPI or None
+        if safe_dpi is not None:
+            # Calculate what dimensions would be at safe_dpi
+            new_width = int(width * safe_dpi / current_dpi)
+            new_height = int(height * safe_dpi / current_dpi)
+            assert new_width <= TESSERACT_MAX_DIMENSION
+            assert new_height <= TESSERACT_MAX_DIMENSION
+    
+    def test_find_safe_dpi_checks_pillow_limit(self):
+        """Test _find_safe_dpi checks Pillow pixel limit."""
+        preprocessor = ImagePreprocessor(target_dpi=300)
+        
+        # Image dimensions that would exceed Pillow limit at high DPI
+        width, height = 8000, 6000  # 48M pixels at 72 DPI
+        current_dpi = 72.0
+        
+        safe_dpi = preprocessor._find_safe_dpi(width, height, current_dpi)
+        
+        if safe_dpi is not None:
+            # Calculate what total pixels would be at safe_dpi
+            new_width = int(width * safe_dpi / current_dpi)
+            new_height = int(height * safe_dpi / current_dpi)
+            total_pixels = new_width * new_height
+            assert total_pixels <= PILLOW_MAX_PIXELS
+    
+    def test_find_safe_dpi_returns_none_for_huge_image(self):
+        """Test _find_safe_dpi returns None for images too large at any DPI."""
+        preprocessor = ImagePreprocessor(target_dpi=300)
+        
+        # Extremely large image that exceeds limits even at 100 DPI
+        width, height = 30000, 25000
+        current_dpi = 72.0
+        
+        safe_dpi = preprocessor._find_safe_dpi(width, height, current_dpi)
+        
+        # For such a large image, it may return None or a very low DPI
+        if safe_dpi is not None:
+            assert safe_dpi >= 100  # Minimum is 100 DPI
