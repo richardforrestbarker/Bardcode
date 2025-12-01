@@ -332,7 +332,7 @@ class ImagePreprocessor:
             # Step 1: Deskew (optional)
             if self.deskew:
                 logger.info(f"Step {step}: Deskewing...")
-                next_file = os.path.join(temp_dir, f"step{step}_deskew.tiff")
+                next_file = os.path.join(temp_dir, f"step{step}_deskew.jpg")
                 if not self._run_imagemagick_cmd([
                     current_file, "-deskew", "40%", "-background", "white", "+repage", next_file
                 ]):
@@ -341,21 +341,10 @@ class ImagePreprocessor:
                 self._save_debug_image(next_file, "deskewed", page_num)
                 step += 1
             
-            # Step 2: Contrast enhancement (optional)
-            if self.enhance_contrast:
-                logger.info(f"Step {step}: Enhancing contrast...")
-                next_file = os.path.join(temp_dir, f"step{step}_contrast.tiff")
-                if not self._run_imagemagick_cmd([
-                    current_file, "-auto-level", "-sigmoidal-contrast", "3x50%", next_file
-                ]):
-                    raise RuntimeError("Failed to enhance contrast")
-                current_file = next_file
-                self._save_debug_image(next_file, "contrast_enhanced", page_num)
-                step += 1
             
             # Step 3: Grayscale
             logger.info(f"Step {step}: Converting to grayscale...")
-            next_file = os.path.join(temp_dir, f"step{step}_gray.tiff")
+            next_file = os.path.join(temp_dir, f"step{step}_gray.jpg")
             if not self._run_imagemagick_cmd([
                 current_file, "-colorspace", "Gray", next_file
             ]):
@@ -366,20 +355,33 @@ class ImagePreprocessor:
             
             # Step 4: Remove background
             logger.info(f"Step {step}: Removing background...")
-            next_file = os.path.join(temp_dir, f"step{step}_nobg.tiff")
+            next_file = os.path.join(temp_dir, f"step{step}_nobg.jpg")
             if not self._run_imagemagick_cmd([
-                current_file, "-fuzz", "10%", "-transparent", "white",
+                current_file, "-fuzz", "30%", "-transparent", "white",
                 "-background", "white", "-alpha", "remove", "-auto-level", next_file
             ]):
                 raise RuntimeError("Failed to remove background")
             current_file = next_file
             self._save_debug_image(next_file, "background_removed", page_num)
             step += 1
+
+             # Step 2: Contrast enhancement (optional)
+            if self.enhance_contrast:
+                logger.info(f"Step {step}: Enhancing contrast...")
+                next_file = os.path.join(temp_dir, f"step{step}_contrast.jpg")
+                if not self._run_imagemagick_cmd([
+                    current_file, "-auto-level", "-sigmoidal-contrast", "3x120%", next_file
+                ]):
+                    raise RuntimeError("Failed to enhance contrast")
+                current_file = next_file
+                self._save_debug_image(next_file, "contrast_enhanced", page_num)
+                step += 1
+
             
             # Step 5: Denoise (optional)
             if self.denoise:
                 logger.info(f"Step {step}: Denoising...")
-                next_file = os.path.join(temp_dir, f"step{step}_denoise.tiff")
+                next_file = os.path.join(temp_dir, f"step{step}_denoise.jpg")
                 if not self._run_imagemagick_cmd([
                     current_file, "-enhance", next_file
                 ]):
@@ -390,11 +392,11 @@ class ImagePreprocessor:
             
             # Step 6: Convert to TIFF
             logger.info(f"Step {step}: Converting to TIFF...")
-            next_file = os.path.join(temp_dir, f"step{step}_tiff.tiff")
+            next_file = os.path.join(temp_dir, f"step{step}_convert.tiff")
             if not self._run_imagemagick_cmd([current_file, "-compress", "lzw", next_file]):
                 raise RuntimeError(f"Failed to convert to TIFF")
             current_file = next_file
-            self._save_debug_image(next_file, "tiff_converted", page_num)
+            self._save_debug_image(next_file, "convert", page_num)
             step += 1
             
             # Step 7: Fix resolution (with size limit checking)
