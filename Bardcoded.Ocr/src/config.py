@@ -27,6 +27,12 @@ DEFAULT_CONFIG = {
         'denoise': True,
         'deskew': True,
         'enhance_contrast': True,
+        # ImageMagick preprocessing parameters
+        'fuzz_percent': 30,  # Fuzz percentage for background removal (0-100)
+        'deskew_threshold': 40,  # Deskew threshold percentage (0-100)
+        'contrast_type': 'sigmoidal',  # Contrast type: 'sigmoidal', 'linear', or 'none'
+        'contrast_strength': 3,  # Contrast strength (for sigmoidal: 1-10 typical)
+        'contrast_midpoint': 120,  # Contrast midpoint percentage (for sigmoidal: 0-200)
     },
     'postprocessing': {
         'min_confidence': 0.5,

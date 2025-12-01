@@ -61,6 +61,13 @@ class ImagePreprocessor:
     Note: Resolution is set as the last step to avoid creating large intermediate files.
     The preprocessor automatically reduces DPI if the resampled image would exceed
     Tesseract's maximum dimension limit (32767 pixels).
+    
+    Configurable parameters:
+    - fuzz_percent: Tolerance for background removal (0-100%)
+    - deskew_threshold: Sensitivity for skew detection (0-100%)
+    - contrast_type: 'sigmoidal', 'linear', or 'none'
+    - contrast_strength: Intensity for sigmoidal contrast (1-10 typical)
+    - contrast_midpoint: Midpoint for sigmoidal contrast (0-200%, >100 brightens)
     """
     
     def __init__(
@@ -69,7 +76,12 @@ class ImagePreprocessor:
         denoise: bool = True,
         deskew: bool = True,
         enhance_contrast: bool = True,
-        debug_manager: Optional['DebugOutputManager'] = None
+        debug_manager: Optional['DebugOutputManager'] = None,
+        fuzz_percent: int = 30,
+        deskew_threshold: int = 40,
+        contrast_type: str = "sigmoidal",
+        contrast_strength: float = 3,
+        contrast_midpoint: int = 120
     ):
         """
         Initialize preprocessor.
@@ -80,12 +92,22 @@ class ImagePreprocessor:
             deskew: Whether to correct skew
             enhance_contrast: Whether to enhance contrast
             debug_manager: Optional DebugOutputManager for saving intermediate steps
+            fuzz_percent: Fuzz percentage for background removal (0-100, default 30)
+            deskew_threshold: Deskew threshold percentage (0-100, default 40)
+            contrast_type: Contrast type - 'sigmoidal', 'linear', or 'none' (default 'sigmoidal')
+            contrast_strength: Contrast strength for sigmoidal (1-10 typical, default 3)
+            contrast_midpoint: Contrast midpoint for sigmoidal (0-200%, default 120)
         """
         self.target_dpi = target_dpi
         self.denoise = denoise
         self.deskew = deskew
         self.enhance_contrast = enhance_contrast
         self.debug_manager = debug_manager
+        self.fuzz_percent = fuzz_percent
+        self.deskew_threshold = deskew_threshold
+        self.contrast_type = contrast_type
+        self.contrast_strength = contrast_strength
+        self.contrast_midpoint = contrast_midpoint
         
         # Verify ImageMagick is installed
         self._check_imagemagick()
@@ -331,10 +353,10 @@ class ImagePreprocessor:
             
             # Step 1: Deskew (optional)
             if self.deskew:
-                logger.info(f"Step {step}: Deskewing...")
+                logger.info(f"Step {step}: Deskewing (threshold: {self.deskew_threshold}%)...")
                 next_file = os.path.join(temp_dir, f"step{step}_deskew.jpg")
                 if not self._run_imagemagick_cmd([
-                    current_file, "-deskew", "40%", "-background", "white", "+repage", next_file
+                    current_file, "-deskew", f"{self.deskew_threshold}%", "-background", "white", "+repage", next_file
                 ]):
                     raise RuntimeError("Failed to deskew")
                 current_file = next_file
@@ -354,10 +376,10 @@ class ImagePreprocessor:
             step += 1
             
             # Step 4: Remove background
-            logger.info(f"Step {step}: Removing background...")
+            logger.info(f"Step {step}: Removing background (fuzz: {self.fuzz_percent}%)...")
             next_file = os.path.join(temp_dir, f"step{step}_nobg.jpg")
             if not self._run_imagemagick_cmd([
-                current_file, "-fuzz", "30%", "-transparent", "white",
+                current_file, "-fuzz", f"{self.fuzz_percent}%", "-transparent", "white",
                 "-background", "white", "-alpha", "remove", "-auto-level", next_file
             ]):
                 raise RuntimeError("Failed to remove background")
@@ -365,14 +387,25 @@ class ImagePreprocessor:
             self._save_debug_image(next_file, "background_removed", page_num)
             step += 1
 
-             # Step 2: Contrast enhancement (optional)
-            if self.enhance_contrast:
-                logger.info(f"Step {step}: Enhancing contrast...")
+             # Step 5: Contrast enhancement (optional)
+            if self.enhance_contrast and self.contrast_type != "none":
+                logger.info(f"Step {step}: Enhancing contrast (type: {self.contrast_type})...")
                 next_file = os.path.join(temp_dir, f"step{step}_contrast.jpg")
-                if not self._run_imagemagick_cmd([
-                    current_file, "-auto-level", "-sigmoidal-contrast", "3x120%", next_file
-                ]):
-                    raise RuntimeError("Failed to enhance contrast")
+                
+                if self.contrast_type == "sigmoidal":
+                    # Sigmoidal contrast: -sigmoidal-contrast strength x midpoint%
+                    contrast_arg = f"{self.contrast_strength}x{self.contrast_midpoint}%"
+                    if not self._run_imagemagick_cmd([
+                        current_file, "-auto-level", "-sigmoidal-contrast", contrast_arg, next_file
+                    ]):
+                        raise RuntimeError("Failed to enhance contrast")
+                elif self.contrast_type == "linear":
+                    # Linear contrast: just auto-level (histogram stretch)
+                    if not self._run_imagemagick_cmd([
+                        current_file, "-auto-level", next_file
+                    ]):
+                        raise RuntimeError("Failed to enhance contrast")
+                
                 current_file = next_file
                 self._save_debug_image(next_file, "contrast_enhanced", page_num)
                 step += 1

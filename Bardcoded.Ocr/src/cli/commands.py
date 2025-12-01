@@ -30,7 +30,12 @@ def process_command(
     skip_model: bool = False,
     verbose: bool = False,
     debug: bool = False,
-    debug_output_dir: Optional[str] = None
+    debug_output_dir: Optional[str] = None,
+    fuzz_percent: int = 30,
+    deskew_threshold: int = 40,
+    contrast_type: str = "sigmoidal",
+    contrast_strength: float = 3,
+    contrast_midpoint: int = 120
 ) -> dict:
     """
     Process receipt images and extract structured data.
@@ -48,6 +53,11 @@ def process_command(
         verbose: Enable verbose logging
         debug: Enable debug mode to save intermediary images
         debug_output_dir: Directory for debug output files
+        fuzz_percent: Fuzz percentage for background removal (0-100)
+        deskew_threshold: Deskew threshold percentage (0-100)
+        contrast_type: Contrast enhancement type ('sigmoidal', 'linear', or 'none')
+        contrast_strength: Contrast strength for sigmoidal type (1-10 typical)
+        contrast_midpoint: Contrast midpoint percentage for sigmoidal type
         
     Returns:
         Dictionary containing extracted receipt data
@@ -83,7 +93,12 @@ def process_command(
         denoise=denoise,
         deskew=deskew,
         enhance_contrast=True,
-        debug_manager=debug_manager
+        debug_manager=debug_manager,
+        fuzz_percent=fuzz_percent,
+        deskew_threshold=deskew_threshold,
+        contrast_type=contrast_type,
+        contrast_strength=contrast_strength,
+        contrast_midpoint=contrast_midpoint
     )
     ocr = create_ocr_engine(ocr_engine, use_gpu=(actual_device == "cuda"))
     field_extractor = FieldExtractor()

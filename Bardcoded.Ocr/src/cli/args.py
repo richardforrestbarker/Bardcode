@@ -89,6 +89,44 @@ def create_argument_parser() -> argparse.ArgumentParser:
         "--debug-output-dir",
         help="Directory to save debug output files (default: ./debug_output)"
     )
+    process_parser.add_argument(
+        "--fuzz-percent",
+        type=int,
+        default=30,
+        metavar="0-100",
+        help="Fuzz percentage for background removal (default: 30). Higher values remove more background colors."
+    )
+    process_parser.add_argument(
+        "--deskew-threshold",
+        type=int,
+        default=40,
+        metavar="0-100",
+        help="Deskew threshold percentage (default: 40). Lower values are more aggressive at detecting skew."
+    )
+    process_parser.add_argument(
+        "--contrast-type",
+        choices=["sigmoidal", "linear", "none"],
+        default="sigmoidal",
+        help="""Contrast enhancement type (default: sigmoidal).
+Types:
+  sigmoidal: Non-linear S-curve contrast (best for most images)
+  linear: Simple histogram stretch using -auto-level only
+  none: Skip contrast enhancement"""
+    )
+    process_parser.add_argument(
+        "--contrast-strength",
+        type=float,
+        default=3,
+        metavar="1-10",
+        help="Contrast strength for sigmoidal type (default: 3). Higher values increase contrast more aggressively."
+    )
+    process_parser.add_argument(
+        "--contrast-midpoint",
+        type=int,
+        default=120,
+        metavar="0-200",
+        help="Contrast midpoint percentage for sigmoidal type (default: 120). Values >100 brighten, <100 darken."
+    )
     
     # Version command
     subparsers.add_parser("version", help="Show version information")

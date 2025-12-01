@@ -260,11 +260,45 @@ preprocessing:
   target_dpi: 300
   denoise: true
   deskew: true
+  enhance_contrast: true
+  # ImageMagick preprocessing parameters
+  fuzz_percent: 30           # Background removal tolerance (0-100)
+  deskew_threshold: 40       # Deskew sensitivity (0-100)
+  contrast_type: sigmoidal   # sigmoidal, linear, or none
+  contrast_strength: 3       # Sigmoidal strength (1-10 typical)
+  contrast_midpoint: 120     # Sigmoidal midpoint (0-200%, >100 brightens)
   
 postprocessing:
   min_confidence: 0.5
   verify_totals: true
 ```
+
+### Preprocessing Parameters
+
+The image preprocessing pipeline supports configurable parameters via CLI or config:
+
+| Parameter | CLI Flag | Default | Description |
+|-----------|----------|---------|-------------|
+| Fuzz % | `--fuzz-percent` | 30 | Tolerance for background removal. Higher values remove more colors similar to white. |
+| Deskew Threshold | `--deskew-threshold` | 40 | Skew detection sensitivity. Lower values are more aggressive. |
+| Contrast Type | `--contrast-type` | sigmoidal | Enhancement algorithm (see below) |
+| Contrast Strength | `--contrast-strength` | 3 | Intensity for sigmoidal contrast (1-10 typical) |
+| Contrast Midpoint | `--contrast-midpoint` | 120 | Midpoint for sigmoidal (>100 brightens, <100 darkens) |
+
+#### Contrast Types
+
+| Type | Description | Best For |
+|------|-------------|----------|
+| `sigmoidal` | Non-linear S-curve contrast using `-sigmoidal-contrast strength x midpoint%`. Preserves highlight and shadow detail while boosting midtones. | Most images, especially photos |
+| `linear` | Simple histogram stretch using `-auto-level`. Stretches the darkest pixel to black and lightest to white. | High-contrast documents |
+| `none` | Skip contrast enhancement entirely. | Already processed images |
+
+**Sigmoidal Parameters:**
+- `contrast_strength` (1-10): Controls the steepness of the S-curve. Higher = more contrast.
+- `contrast_midpoint` (0-200%): The brightness level around which contrast is centered.
+  - Values > 100% brighten the image overall
+  - Values < 100% darken the image overall
+  - 50% targets middle tones (traditional midpoint)
 
 ## Output Format
 
@@ -367,20 +401,20 @@ Shell scripts are provided in the `scripts/` directory for each preprocessing st
 
 #### Direct ImageMagick Commands
 
-If you prefer to run ImageMagick commands directly without the scripts:
+If you prefer to run ImageMagick commands directly without the scripts. Parameters shown with default values:
 
 ```bash
-# Step 1: Deskew
+# Step 1: Deskew (threshold: 40%)
 magick input.jpg -deskew 40% -background white step1.tiff
 
-# Step 2: Enhance contrast
-magick step1.tiff -auto-level -sigmoidal-contrast 3x50% step2.tiff
+# Step 2: Enhance contrast (sigmoidal: strength 3, midpoint 120%)
+magick step1.tiff -auto-level -sigmoidal-contrast 3x120% step2.tiff
 
 # Step 3: Grayscale
 magick step2.tiff -colorspace Gray step3.tiff
 
-# Step 4: Remove background
-magick step3.tiff -fuzz 10% -transparent white -background white -alpha remove -auto-level step4.tiff
+# Step 4: Remove background (fuzz: 30%)
+magick step3.tiff -fuzz 30% -transparent white -background white -alpha remove -auto-level step4.tiff
 
 # Step 5: Denoise
 magick step4.tiff -enhance step5.tiff
@@ -394,14 +428,14 @@ magick step6.tiff -resample 300 -units PixelsPerInch final.tiff
 
 #### All-in-One Command
 
-Run all preprocessing steps in a single ImageMagick command:
+Run all preprocessing steps in a single ImageMagick command (with default parameter values):
 
 ```bash
 magick input.jpg \
     -deskew 40% -background white \
-    -auto-level -sigmoidal-contrast 3x50% \
+    -auto-level -sigmoidal-contrast 3x120% \
     -colorspace Gray \
-    -fuzz 10% -transparent white -background white -alpha remove -auto-level \
+    -fuzz 30% -transparent white -background white -alpha remove -auto-level \
     -enhance \
     -compress lzw \
     -resample 300 -units PixelsPerInch \
