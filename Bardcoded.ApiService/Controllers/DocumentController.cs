@@ -1,4 +1,7 @@
 using Bardcoded.ApiService.Ocr;
+using Bardcoded.Data.Ocr.Messages;
+using Bardcoded.Data.Messages;
+using Bardcoded.Data.Ocr;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bardcoded.ApiService.Controllers

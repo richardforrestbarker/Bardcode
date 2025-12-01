@@ -1,5 +1,6 @@
 using Bardcoded.ApiService.Controllers;
 using Bardcoded.ApiService.Ocr;
+using Bardcoded.ApiService.Ocr.Messages;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Xunit;

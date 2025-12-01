@@ -2,13 +2,18 @@
 @using System.Text.Json
 @using System.IO
 @using Microsoft.AspNetCore.Components.Forms
-@inject HttpClient Http
+@using Bardcoded.Data.Ocr;
+@using Bardcoded.Data.Ocr.Messages;
+@using Bardcoded.Data.Messages;
+@using Bardcoded.Data.Ocr;
+
+@inject IDocumentProcessor DocumentProcessingClient
 @inject ILogger<DocumentProcessingView> Logger
 @implements IDisposable
 
 <div class="document-processing-view">
     <h3>Document Processing Live View</h3>
-    
+
     @if (!string.IsNullOrEmpty(errorMessage))
     {
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -31,8 +36,8 @@
                 <div class="card-body text-center">
                     @if (!string.IsNullOrEmpty(sourceImageBase64))
                     {
-                        <img src="data:image/png;base64,@(currentPhase == ProcessingPhase.Ocr && !string.IsNullOrEmpty(preprocessedImageBase64) ? preprocessedImageBase64 : sourceImageBase64)" 
-                             class="img-fluid" 
+                        <img src="data:image/png;base64,@(currentPhase == ProcessingPhase.Ocr && !string.IsNullOrEmpty(preprocessedImageBase64) ? preprocessedImageBase64 : sourceImageBase64)"
+                             class="img-fluid"
                              alt="@(currentPhase == ProcessingPhase.Ocr ? "Preprocessing Result" : "Source Image")"
                              style="max-height: 500px;" />
                     }
@@ -78,18 +83,18 @@
                         <div class="timer-progress" title="Updating in @timerSecondsRemaining seconds">
                             <svg width="24" height="24" viewBox="0 0 36 36">
                                 <path d="M18 2.0845
-                                    a 15.9155 15.9155 0 0 1 0 31.831
-                                    a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    fill="none"
-                                    stroke="#e0e0e0"
-                                    stroke-width="3"/>
+                                        a 15.9155 15.9155 0 0 1 0 31.831
+                                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                                      fill="none"
+                                      stroke="#e0e0e0"
+                                      stroke-width="3" />
                                 <path d="M18 2.0845
-                                    a 15.9155 15.9155 0 0 1 0 31.831
-                                    a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    fill="none"
-                                    stroke="#007bff"
-                                    stroke-width="3"
-                                    stroke-dasharray="@timerProgress, 100"/>
+                                        a 15.9155 15.9155 0 0 1 0 31.831
+                                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                                      fill="none"
+                                      stroke="#007bff"
+                                      stroke-width="3"
+                                      stroke-dasharray="@timerProgress, 100" />
                             </svg>
                             <span class="ms-1">@timerSecondsRemaining s</span>
                         </div>
@@ -107,8 +112,8 @@
                     }
                     else if (currentPhase == ProcessingPhase.Preprocessing && !string.IsNullOrEmpty(preprocessedImageBase64))
                     {
-                        <img src="data:image/png;base64,@preprocessedImageBase64" 
-                             class="img-fluid" 
+                        <img src="data:image/png;base64,@preprocessedImageBase64"
+                             class="img-fluid"
                              alt="Preprocessed Image"
                              style="max-height: 500px;" />
                     }
@@ -117,12 +122,12 @@
                         <div class="ocr-result text-start" style="max-height: 500px; overflow-y: auto;">
                             <h5>Extracted Text:</h5>
                             <pre class="bg-light p-3 rounded">@ocrResult.RawOcrText</pre>
-                            
+
                             @if (ocrResult.Words?.Count > 0)
                             {
                                 <h6>Words detected: @ocrResult.Words.Count</h6>
                             }
-                            
+
                             @if (inferenceResult != null)
                             {
                                 <hr />
@@ -192,12 +197,12 @@
                 <div class="row">
                     <div class="col-md-4">
                         <div class="form-check mb-3">
-                            <input type="checkbox" class="form-check-input" id="deskew" 
+                            <input type="checkbox" class="form-check-input" id="deskew"
                                    @bind="settings.Deskew" @bind:after="OnSettingsChanged" />
                             <label class="form-check-label" for="deskew">Deskew</label>
                         </div>
                         <div class="form-check mb-3">
-                            <input type="checkbox" class="form-check-input" id="denoise" 
+                            <input type="checkbox" class="form-check-input" id="denoise"
                                    @bind="settings.Denoise" @bind:after="OnSettingsChanged" />
                             <label class="form-check-label" for="denoise">Denoise</label>
                         </div>
@@ -207,7 +212,7 @@
                             <label for="fuzzPercent" class="form-label">
                                 Fuzz Percent: @settings.FuzzPercent%
                             </label>
-                            <input type="range" class="form-range" id="fuzzPercent" 
+                            <input type="range" class="form-range" id="fuzzPercent"
                                    min="0" max="100" step="5"
                                    @bind="settings.FuzzPercent" @bind:after="OnSettingsChanged" />
                         </div>
@@ -215,7 +220,7 @@
                             <label for="deskewThreshold" class="form-label">
                                 Deskew Threshold: @settings.DeskewThreshold%
                             </label>
-                            <input type="range" class="form-range" id="deskewThreshold" 
+                            <input type="range" class="form-range" id="deskewThreshold"
                                    min="0" max="100" step="5"
                                    @bind="settings.DeskewThreshold" @bind:after="OnSettingsChanged" />
                         </div>
@@ -223,7 +228,7 @@
                     <div class="col-md-4">
                         <div class="mb-3">
                             <label for="contrastType" class="form-label">Contrast Type</label>
-                            <select class="form-select" id="contrastType" 
+                            <select class="form-select" id="contrastType"
                                     @bind="settings.ContrastType" @bind:after="OnSettingsChanged">
                                 <option value="sigmoidal">Sigmoidal</option>
                                 <option value="linear">Linear</option>
@@ -236,7 +241,7 @@
                                 <label for="contrastStrength" class="form-label">
                                     Contrast Strength: @settings.ContrastStrength.ToString("F1")
                                 </label>
-                                <input type="range" class="form-range" id="contrastStrength" 
+                                <input type="range" class="form-range" id="contrastStrength"
                                        min="1" max="10" step="0.5"
                                        @bind="settings.ContrastStrength" @bind:after="OnSettingsChanged" />
                             </div>
@@ -244,7 +249,7 @@
                                 <label for="contrastMidpoint" class="form-label">
                                     Contrast Midpoint: @settings.ContrastMidpoint%
                                 </label>
-                                <input type="range" class="form-range" id="contrastMidpoint" 
+                                <input type="range" class="form-range" id="contrastMidpoint"
                                        min="0" max="200" step="10"
                                        @bind="settings.ContrastMidpoint" @bind:after="OnSettingsChanged" />
                             </div>
@@ -269,7 +274,7 @@
                 <i class="bi bi-arrow-counterclockwise me-2"></i>Reset
             </button>
         }
-        
+
         @if (currentPhase == ProcessingPhase.Preprocessing && !string.IsNullOrEmpty(preprocessedImageBase64))
         {
             <button class="btn btn-primary" @onclick="AcceptPreprocessing" disabled="@isLoading">
@@ -290,15 +295,15 @@
         display: flex;
         align-items: center;
     }
-    
-    .timer-progress svg {
-        transform: rotate(-90deg);
-    }
-    
+
+        .timer-progress svg {
+            transform: rotate(-90deg);
+        }
+
     .document-processing-view .card {
         min-height: 400px;
     }
-    
+
     .ocr-result pre {
         white-space: pre-wrap;
         word-wrap: break-word;
@@ -311,7 +316,7 @@
     /// Event callback when the user accepts the final OCR result.
     /// </summary>
     [Parameter]
-    public EventCallback<InferenceResultDto> OnResultAccepted { get; set; }
+    public EventCallback<InferenceResult> OnResultAccepted { get; set; }
 
     /// <summary>
     /// Optional initial image as base64.
@@ -336,8 +341,8 @@
     private string? currentJobId;
 
     private PreprocessingSettings settings = new();
-    private OcrResultDto? ocrResult;
-    private InferenceResultDto? inferenceResult;
+    private OcrResult? ocrResult;
+    private InferenceResult? inferenceResult;
 
     private System.Timers.Timer? updateTimer;
     private System.Timers.Timer? progressTimer;
@@ -364,7 +369,7 @@
     private async Task HandleFileSelection(InputFileChangeEventArgs e)
     {
         errorMessage = null;
-        
+
         try
         {
             var file = e.File;
@@ -372,7 +377,7 @@
             {
                 return;
             }
-            
+
             // Validate file size (max 10MB)
             const long maxFileSize = 10 * 1024 * 1024;
             if (file.Size > maxFileSize)
@@ -381,7 +386,7 @@
                 await InvokeAsync(StateHasChanged);
                 return;
             }
-            
+
             // Validate file type
             if (!file.ContentType.StartsWith("image/"))
             {
@@ -389,23 +394,23 @@
                 await InvokeAsync(StateHasChanged);
                 return;
             }
-            
+
             // Read file and convert to base64
             using var stream = file.OpenReadStream(maxFileSize);
             using var memoryStream = new MemoryStream();
             await stream.CopyToAsync(memoryStream);
             var bytes = memoryStream.ToArray();
             sourceImageBase64 = Convert.ToBase64String(bytes);
-            
+
             // Clear previous results
             preprocessedImageBase64 = null;
             ocrResult = null;
             inferenceResult = null;
             currentPhase = ProcessingPhase.Preprocessing;
-            
+
             // Trigger preprocessing
             OnSettingsChanged();
-            
+
             Logger.LogInformation("Image selected: {FileName}, {Size} bytes", file.Name, file.Size);
         }
         catch (Exception ex)
@@ -413,7 +418,7 @@
             errorMessage = $"Error reading file: {ex.Message}";
             Logger.LogError(ex, "Error reading file");
         }
-        
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -489,7 +494,7 @@
 
         try
         {
-            var request = new PreprocessingRequestDto
+            var request = new PreprocessingRequest
             {
                 ImageBase64 = sourceImageBase64,
                 JobId = currentJobId,
@@ -502,26 +507,17 @@
                 ContrastMidpoint = settings.ContrastMidpoint
             };
 
-            var response = await Http.PostAsJsonAsync("/api/document/preprocess", request);
-            
-            if (response.IsSuccessStatusCode)
+            var result = await DocumentProcessingClient.PreprocessImageAsync(request);
+
+            if (result != null && result.Status == "done")
             {
-                var result = await response.Content.ReadFromJsonAsync<PreprocessingResultDto>();
-                if (result != null && result.Status == "done")
-                {
-                    preprocessedImageBase64 = result.ImageBase64;
-                    Logger.LogInformation("Preprocessing complete for job {JobId}", currentJobId);
-                }
-                else
-                {
-                    errorMessage = result?.Error ?? "Preprocessing failed";
-                    Logger.LogWarning("Preprocessing failed: {Error}", errorMessage);
-                }
+                preprocessedImageBase64 = result.ImageBase64;
+                Logger.LogInformation("Preprocessing complete for job {JobId}", currentJobId);
             }
             else
             {
-                errorMessage = $"Preprocessing request failed: {response.StatusCode}";
-                Logger.LogError("Preprocessing request failed with status {StatusCode}", response.StatusCode);
+                errorMessage = result?.Error ?? "Preprocessing failed";
+                Logger.LogWarning("Preprocessing failed: {Error}", errorMessage);
             }
         }
         catch (Exception ex)
@@ -555,7 +551,7 @@
         try
         {
             // Run OCR
-            var ocrRequest = new OcrRequestDto
+            var ocrRequest = new OcrRequest
             {
                 ImageBase64 = preprocessedImageBase64,
                 JobId = currentJobId,
@@ -564,27 +560,19 @@
                 Device = "auto"
             };
 
-            var ocrResponse = await Http.PostAsJsonAsync("/api/document/ocr", ocrRequest);
-            
-            if (!ocrResponse.IsSuccessStatusCode)
-            {
-                errorMessage = $"OCR request failed: {ocrResponse.StatusCode}";
-                return;
-            }
+            var ocrResult = await DocumentProcessingClient.RunOcrAsync(ocrRequest);
 
-            ocrResult = await ocrResponse.Content.ReadFromJsonAsync<OcrResultDto>();
-            
             if (ocrResult == null || ocrResult.Status != "done")
             {
                 errorMessage = ocrResult?.Error ?? "OCR failed";
                 return;
             }
 
-            Logger.LogInformation("OCR complete for job {JobId}, detected {WordCount} words", 
+            Logger.LogInformation("OCR complete for job {JobId}, detected {WordCount} words",
                 currentJobId, ocrResult.Words?.Count ?? 0);
 
             // Run Inference
-            var inferenceRequest = new InferenceRequestDto
+            var inferenceRequest = new InferenceRequest
             {
                 OcrResult = ocrResult,
                 ImageBase64 = preprocessedImageBase64,
@@ -594,16 +582,8 @@
                 Device = "auto"
             };
 
-            var inferenceResponse = await Http.PostAsJsonAsync("/api/document/inference", inferenceRequest);
-            
-            if (!inferenceResponse.IsSuccessStatusCode)
-            {
-                errorMessage = $"Inference request failed: {inferenceResponse.StatusCode}";
-                return;
-            }
+            var inferenceResult = await DocumentProcessingClient.RunInferenceAsync(inferenceRequest);
 
-            inferenceResult = await inferenceResponse.Content.ReadFromJsonAsync<InferenceResultDto>();
-            
             if (inferenceResult == null || inferenceResult.Status != "done")
             {
                 errorMessage = inferenceResult?.Error ?? "Inference failed";
@@ -629,7 +609,7 @@
         currentPhase = ProcessingPhase.Preprocessing;
         ocrResult = null;
         inferenceResult = null;
-        
+
         // Only trigger preprocessing if we don't have a result yet
         if (string.IsNullOrEmpty(preprocessedImageBase64))
         {
@@ -679,107 +659,5 @@
         public string ContrastType { get; set; } = "sigmoidal";
         public double ContrastStrength { get; set; } = 3.0;
         public int ContrastMidpoint { get; set; } = 120;
-    }
-
-    // DTOs for API communication
-    public class PreprocessingRequestDto
-    {
-        public string ImageBase64 { get; set; } = "";
-        public string? Filename { get; set; }
-        public string? JobId { get; set; }
-        public bool Denoise { get; set; }
-        public bool Deskew { get; set; }
-        public int FuzzPercent { get; set; }
-        public int DeskewThreshold { get; set; }
-        public string ContrastType { get; set; } = "sigmoidal";
-        public double ContrastStrength { get; set; }
-        public int ContrastMidpoint { get; set; }
-    }
-
-    public class PreprocessingResultDto
-    {
-        public string JobId { get; set; } = "";
-        public string Status { get; set; } = "";
-        public string? ImageBase64 { get; set; }
-        public string? ImageFormat { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public string? Error { get; set; }
-    }
-
-    public class OcrRequestDto
-    {
-        public string ImageBase64 { get; set; } = "";
-        public string? JobId { get; set; }
-        public string OcrEngine { get; set; } = "paddle";
-        public int TargetDpi { get; set; } = 300;
-        public string Device { get; set; } = "auto";
-    }
-
-    public class OcrResultDto
-    {
-        public string JobId { get; set; } = "";
-        public string Status { get; set; } = "";
-        public List<OcrWordDto>? Words { get; set; }
-        public string? RawOcrText { get; set; }
-        public int ImageWidth { get; set; }
-        public int ImageHeight { get; set; }
-        public string? Error { get; set; }
-    }
-
-    public class OcrWordDto
-    {
-        public string Text { get; set; } = "";
-        public BoundingBoxDto? Box { get; set; }
-        public double Confidence { get; set; }
-    }
-
-    public class BoundingBoxDto
-    {
-        public int X0 { get; set; }
-        public int Y0 { get; set; }
-        public int X1 { get; set; }
-        public int Y1 { get; set; }
-    }
-
-    public class InferenceRequestDto
-    {
-        public OcrResultDto? OcrResult { get; set; }
-        public string ImageBase64 { get; set; } = "";
-        public string? JobId { get; set; }
-        public string Model { get; set; } = "naver-clova-ix/donut-base-finetuned-cord-v2";
-        public string ModelType { get; set; } = "donut";
-        public string Device { get; set; } = "auto";
-    }
-
-    public class InferenceResultDto
-    {
-        public string JobId { get; set; } = "";
-        public string Status { get; set; } = "";
-        public ExtractedFieldDto? VendorName { get; set; }
-        public ExtractedFieldDto? MerchantAddress { get; set; }
-        public ExtractedFieldDto? Date { get; set; }
-        public ExtractedFieldDto? TotalAmount { get; set; }
-        public ExtractedFieldDto? Subtotal { get; set; }
-        public ExtractedFieldDto? TaxAmount { get; set; }
-        public ExtractedFieldDto? Currency { get; set; }
-        public List<LineItemDto>? LineItems { get; set; }
-        public string? Error { get; set; }
-    }
-
-    public class ExtractedFieldDto
-    {
-        public string? Value { get; set; }
-        public double Confidence { get; set; }
-        public BoundingBoxDto? Box { get; set; }
-    }
-
-    public class LineItemDto
-    {
-        public string? Description { get; set; }
-        public decimal? Quantity { get; set; }
-        public decimal? UnitPrice { get; set; }
-        public decimal? LineTotal { get; set; }
-        public double Confidence { get; set; }
     }
 }

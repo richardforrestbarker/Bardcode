@@ -1,229 +1,25 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using Bardcoded.Data.Ocr.Messages;
+using Bardcoded.Data.Messages;
+using Bardcoded.Data.Ocr;
 using Bardcoded.Data;
 using Bardcoded.Data.Messages;
 
 namespace Bardcoded.ApiService.Ocr
 {
-    /// <summary>
-    /// Interface for document processing service for the OCR pipeline live view.
-    /// </summary>
-    public interface IDocumentProcessor
-    {
-        /// <summary>
-        /// Run preprocessing on an image and return the result as base64.
-        /// </summary>
-        Task<PreprocessingResult> PreprocessImageAsync(PreprocessingRequest request);
-        
-        /// <summary>
-        /// Run OCR on a preprocessed image.
-        /// </summary>
-        Task<OcrResult> RunOcrAsync(OcrRequest request);
-        
-        /// <summary>
-        /// Run model inference on OCR results.
-        /// </summary>
-        Task<InferenceResult> RunInferenceAsync(InferenceRequest request);
-        
-        /// <summary>
-        /// Get the status of a job.
-        /// </summary>
-        Task<JobStatus?> GetJobStatusAsync(string jobId);
-    }
-
-    /// <summary>
-    /// Request for preprocessing an image.
-    /// </summary>
-    public class PreprocessingRequest
-    {
-        /// <summary>
-        /// Base64 encoded source image.
-        /// </summary>
-        public required string ImageBase64 { get; set; }
-        
-        /// <summary>
-        /// Original filename for format detection.
-        /// </summary>
-        public string? Filename { get; set; }
-        
-        /// <summary>
-        /// Job identifier for tracking.
-        /// </summary>
-        public string? JobId { get; set; }
-        
-        /// <summary>
-        /// Apply denoising.
-        /// </summary>
-        public bool Denoise { get; set; } = false;
-        
-        /// <summary>
-        /// Apply deskewing.
-        /// </summary>
-        public bool Deskew { get; set; } = true;
-        
-        /// <summary>
-        /// Fuzz percentage for background removal (0-100).
-        /// </summary>
-        public int FuzzPercent { get; set; } = 30;
-        
-        /// <summary>
-        /// Deskew threshold percentage (0-100).
-        /// </summary>
-        public int DeskewThreshold { get; set; } = 40;
-        
-        /// <summary>
-        /// Contrast enhancement type: 'sigmoidal', 'linear', or 'none'.
-        /// </summary>
-        public string ContrastType { get; set; } = "sigmoidal";
-        
-        /// <summary>
-        /// Contrast strength for sigmoidal type (1-10).
-        /// </summary>
-        public double ContrastStrength { get; set; } = 3.0;
-        
-        /// <summary>
-        /// Contrast midpoint percentage (0-200).
-        /// </summary>
-        public int ContrastMidpoint { get; set; } = 120;
-    }
-
-    /// <summary>
-    /// Result from preprocessing.
-    /// </summary>
-    public class PreprocessingResult
-    {
-        public required string JobId { get; set; }
-        public required string Status { get; set; }
-        public string? ImageBase64 { get; set; }
-        public string? ImageFormat { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public string? Error { get; set; }
-    }
-
-    /// <summary>
-    /// Request for running OCR.
-    /// </summary>
-    public class OcrRequest
-    {
-        /// <summary>
-        /// Path to preprocessed image file or base64 encoded image.
-        /// </summary>
-        public required string ImageBase64 { get; set; }
-        
-        /// <summary>
-        /// Job identifier for tracking.
-        /// </summary>
-        public string? JobId { get; set; }
-        
-        /// <summary>
-        /// OCR engine to use: 'paddle' or 'tesseract'.
-        /// </summary>
-        public string OcrEngine { get; set; } = "paddle";
-        
-        /// <summary>
-        /// Target DPI for resampling.
-        /// </summary>
-        public int TargetDpi { get; set; } = 300;
-        
-        /// <summary>
-        /// Device for OCR: 'auto', 'cuda', or 'cpu'.
-        /// </summary>
-        public string Device { get; set; } = "auto";
-    }
-
-    /// <summary>
-    /// Result from OCR.
-    /// </summary>
-    public class OcrResult
-    {
-        public required string JobId { get; set; }
-        public required string Status { get; set; }
-        public List<OcrWord> Words { get; set; } = new();
-        public string? RawOcrText { get; set; }
-        public int ImageWidth { get; set; }
-        public int ImageHeight { get; set; }
-        public string? Error { get; set; }
-    }
-
-    /// <summary>
-    /// Request for running model inference.
-    /// </summary>
-    public class InferenceRequest
-    {
-        /// <summary>
-        /// Path to OCR result JSON or the OcrResult object.
-        /// </summary>
-        public required OcrResult OcrResult { get; set; }
-        
-        /// <summary>
-        /// Base64 encoded image for visual features.
-        /// </summary>
-        public required string ImageBase64 { get; set; }
-        
-        /// <summary>
-        /// Job identifier for tracking.
-        /// </summary>
-        public string? JobId { get; set; }
-        
-        /// <summary>
-        /// Model name or path.
-        /// </summary>
-        public string Model { get; set; } = "naver-clova-ix/donut-base-finetuned-cord-v2";
-        
-        /// <summary>
-        /// Model type: 'donut', 'idefics2', or 'layoutlmv3'.
-        /// </summary>
-        public string ModelType { get; set; } = "donut";
-        
-        /// <summary>
-        /// Device for inference: 'auto', 'cuda', or 'cpu'.
-        /// </summary>
-        public string Device { get; set; } = "auto";
-    }
-
-    /// <summary>
-    /// Result from model inference.
-    /// </summary>
-    public class InferenceResult
-    {
-        public required string JobId { get; set; }
-        public required string Status { get; set; }
-        public ExtractedField? VendorName { get; set; }
-        public ExtractedField? MerchantAddress { get; set; }
-        public ExtractedField? Date { get; set; }
-        public ExtractedField? TotalAmount { get; set; }
-        public ExtractedField? Subtotal { get; set; }
-        public ExtractedField? TaxAmount { get; set; }
-        public ExtractedField? Currency { get; set; }
-        public List<LineItem> LineItems { get; set; } = new();
-        public string? Error { get; set; }
-    }
-
-    /// <summary>
-    /// Job status for tracking long-running operations.
-    /// </summary>
-    public class JobStatus
-    {
-        public required string JobId { get; set; }
-        public required string Status { get; set; }
-        public string? Phase { get; set; }
-        public int Progress { get; set; }
-        public string? Message { get; set; }
-        public string? Error { get; set; }
-    }
 
     /// <summary>
     /// Document processor implementation that calls Python CLI.
     /// </summary>
-    public class DocumentProcessor : IDocumentProcessor
+    public class ServiceSideDocumentProcessor : IDocumentProcessor
     {
-        private readonly ILogger<DocumentProcessor> _logger;
+        private readonly ILogger<ServiceSideDocumentProcessor> _logger;
         private readonly OcrConfiguration _config;
         private readonly ConcurrentDictionary<string, JobStatus> _jobs = new();
 
-        public DocumentProcessor(ILogger<DocumentProcessor> logger, OcrConfiguration config)
+        public ServiceSideDocumentProcessor(ILogger<ServiceSideDocumentProcessor> logger, OcrConfiguration config)
         {
             _logger = logger;
             _config = config;

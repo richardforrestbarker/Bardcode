@@ -1,4 +1,5 @@
 using Bardcoded.Data;
+using Bardcoded.Data.Ocr;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bardcoded.ApiService.Ocr
@@ -24,7 +25,7 @@ namespace Bardcoded.ApiService.Ocr
             services.AddSingleton(ocrConfig);
             
             // Register the document processor
-            services.AddSingleton<IDocumentProcessor, DocumentProcessor>();
+            services.AddSingleton<IDocumentProcessor, ServiceSideDocumentProcessor>();
             
             return services;
         }

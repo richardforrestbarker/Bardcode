@@ -6,9 +6,7 @@ using Bardcoded.Data;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FeatureManagement;
-using Microsoft.OpenApi.Validations;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,7 +22,7 @@ var connectionString = builder.Configuration.GetConnectionString("Barcode") ?? "
 var corsconfig = builder.Configuration.GetRequiredSection("Cors").Get<Dictionary<string, CorsPolicy>>();
 
 var integrations = builder.Configuration.GetRequiredSection("Application:Integrations").Get<IEnumerable<ApiProviderConfiguration>>();
-if (!integrations.Any())
+if (!integrations?.Any() ?? true)
 {
     Console.WriteLine("No API provider configs found. If the feature is on, it still won't work.");
 }

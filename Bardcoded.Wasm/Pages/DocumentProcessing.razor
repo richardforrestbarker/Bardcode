@@ -1,5 +1,7 @@
 @page "/document-processing"
 @using Bardcoded.Wasm.Components
+@using Bardcoded.Data.Messages
+@using Bardcoded.Data.Ocr.Messages
 
 <PageTitle>Document Processing - Bardcode</PageTitle>
 
@@ -22,9 +24,9 @@
 </div>
 
 @code {
-    private DocumentProcessingView.InferenceResultDto? acceptedResult;
+    private InferenceResult? acceptedResult;
     
-    private void HandleResultAccepted(DocumentProcessingView.InferenceResultDto result)
+    private void HandleResultAccepted(InferenceResult result)
     {
         acceptedResult = result;
         // TODO: Save the result or navigate to inventory
