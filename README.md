@@ -466,11 +466,14 @@ The Receipt OCR system uses a hybrid architecture:
 
 ### OCR Pipeline Stages
 
-1. **Image Preprocessing**
-   - Grayscale conversion
-   - Denoising (bilateral filter)
+1. **Image Preprocessing** (using ImageMagick CLI via shell scripts)
    - Deskewing (rotation correction)
-   - Contrast enhancement (CLAHE)
+   - Contrast enhancement
+   - Grayscale conversion
+   - Remove background
+   - Denoising
+   - Convert to TIFF format (optimal for Tesseract)
+   - Fix resolution to 300 DPI
 
 2. **Text Detection & OCR**
    - PaddleOCR (primary, high accuracy)
@@ -530,6 +533,32 @@ brew install tesseract
 ```
 
 Windows: Download from [Tesseract GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
+
+**ImageMagick** (required for image preprocessing):
+
+ImageMagick CLI is used for optimal image preprocessing to improve OCR accuracy.
+
+Ubuntu/Debian:
+```bash
+sudo apt-get install imagemagick
+```
+
+macOS:
+```bash
+brew install imagemagick
+```
+
+Windows:
+1. Download the ImageMagick installer from [ImageMagick Downloads](https://imagemagick.org/script/download.php#windows)
+2. During installation, ensure you check the option "Install development headers and libraries for C and C++"
+3. Add ImageMagick to your system PATH
+
+Verify installation:
+```bash
+magick --version
+```
+
+See `Bardcoded.Ocr/README.md` for details on using the preprocessing scripts manually.
 
 ### Using the OCR Feature
 

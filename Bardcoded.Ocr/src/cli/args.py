@@ -40,8 +40,18 @@ def create_argument_parser() -> argparse.ArgumentParser:
     process_parser.add_argument(
         "--model",
         "-m",
-        default="microsoft/layoutlmv3-base",
-        help="Model name or path (default: microsoft/layoutlmv3-base)"
+        default="naver-clova-ix/donut-base-finetuned-cord-v2",
+        help="Model name or path (default: naver-clova-ix/donut-base-finetuned-cord-v2)"
+    )
+    process_parser.add_argument(
+        "--model-type",
+        choices=["donut", "idefics2", "layoutlmv3"],
+        default="donut",
+        help="""Model type to use for field extraction (default: donut).
+Types:
+  donut: OCR-free document understanding (MIT license, fast, recommended)
+  idefics2: Multimodal vision-language model (Apache 2.0, high quality)
+  layoutlmv3: Layout-aware token classification (requires OCR first)"""
     )
     process_parser.add_argument(
         "--ocr-engine",
@@ -88,6 +98,44 @@ def create_argument_parser() -> argparse.ArgumentParser:
     process_parser.add_argument(
         "--debug-output-dir",
         help="Directory to save debug output files (default: ./debug_output)"
+    )
+    process_parser.add_argument(
+        "--fuzz-percent",
+        type=int,
+        default=30,
+        metavar="0-100",
+        help="Fuzz percentage for background removal (default: 30). Higher values remove more background colors."
+    )
+    process_parser.add_argument(
+        "--deskew-threshold",
+        type=int,
+        default=40,
+        metavar="0-100",
+        help="Deskew threshold percentage (default: 40). Lower values are more aggressive at detecting skew."
+    )
+    process_parser.add_argument(
+        "--contrast-type",
+        choices=["sigmoidal", "linear", "none"],
+        default="sigmoidal",
+        help="""Contrast enhancement type (default: sigmoidal).
+Types:
+  sigmoidal: Non-linear S-curve contrast (best for most images)
+  linear: Simple histogram stretch using -auto-level only
+  none: Skip contrast enhancement"""
+    )
+    process_parser.add_argument(
+        "--contrast-strength",
+        type=float,
+        default=3,
+        metavar="1-10",
+        help="Contrast strength for sigmoidal type (default: 3). Higher values increase contrast more aggressively."
+    )
+    process_parser.add_argument(
+        "--contrast-midpoint",
+        type=int,
+        default=120,
+        metavar="0-200",
+        help="Contrast midpoint percentage for sigmoidal type (default: 120). Values >100 brighten, <100 darken."
     )
     
     # Version command

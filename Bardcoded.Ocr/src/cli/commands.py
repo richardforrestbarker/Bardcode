@@ -21,7 +21,8 @@ VERSION = "1.0.0"
 def process_command(
     image_paths: List[str],
     output_path: Optional[str] = None,
-    model_name: str = "microsoft/layoutlmv3-base",
+    model_name: str = "naver-clova-ix/donut-base-finetuned-cord-v2",
+    model_type: str = "donut",
     ocr_engine: str = "paddle",
     device: str = "auto",
     denoise: bool = False,
@@ -30,7 +31,12 @@ def process_command(
     skip_model: bool = False,
     verbose: bool = False,
     debug: bool = False,
-    debug_output_dir: Optional[str] = None
+    debug_output_dir: Optional[str] = None,
+    fuzz_percent: int = 30,
+    deskew_threshold: int = 40,
+    contrast_type: str = "sigmoidal",
+    contrast_strength: float = 3,
+    contrast_midpoint: int = 120
 ) -> dict:
     """
     Process receipt images and extract structured data.
@@ -38,7 +44,8 @@ def process_command(
     Args:
         image_paths: List of paths to receipt image files
         output_path: Optional path to write JSON output
-        model_name: Model name or path for LayoutLM
+        model_name: Model name or path for the selected model type
+        model_type: Model type to use ('donut', 'idefics2', or 'layoutlmv3')
         ocr_engine: OCR engine to use ('paddle' or 'tesseract')
         device: Device for inference ('auto', 'cuda', or 'cpu')
         denoise: Apply denoising preprocessing
@@ -48,6 +55,11 @@ def process_command(
         verbose: Enable verbose logging
         debug: Enable debug mode to save intermediary images
         debug_output_dir: Directory for debug output files
+        fuzz_percent: Fuzz percentage for background removal (0-100)
+        deskew_threshold: Deskew threshold percentage (0-100)
+        contrast_type: Contrast enhancement type ('sigmoidal', 'linear', or 'none')
+        contrast_strength: Contrast strength for sigmoidal type (1-10 typical)
+        contrast_midpoint: Contrast midpoint percentage for sigmoidal type
         
     Returns:
         Dictionary containing extracted receipt data
@@ -56,6 +68,7 @@ def process_command(
     check_dependencies()
     
     logger.info(f"Processing {len(image_paths)} image(s)...")
+    logger.info(f"Model type: {model_type}")
     logger.info(f"Model: {model_name}")
     logger.info(f"OCR Engine: {ocr_engine}")
     if debug:
@@ -83,7 +96,12 @@ def process_command(
         denoise=denoise,
         deskew=deskew,
         enhance_contrast=True,
-        debug_manager=debug_manager
+        debug_manager=debug_manager,
+        fuzz_percent=fuzz_percent,
+        deskew_threshold=deskew_threshold,
+        contrast_type=contrast_type,
+        contrast_strength=contrast_strength,
+        contrast_midpoint=contrast_midpoint
     )
     ocr = create_ocr_engine(ocr_engine, use_gpu=(actual_device == "cuda"))
     field_extractor = FieldExtractor()
@@ -110,18 +128,9 @@ def process_command(
         for page_num, image_path in enumerate(image_paths):
             logger.info(f"Processing page {page_num + 1}: {image_path}")
             
-            # Load image
-            image = load_image(image_path)
-            img_height, img_width = get_image_dimensions(image)
-            logger.info(f"Image size: {img_width}x{img_height}")
-            
-            # Store source image for debug output
-            if debug and debug_manager:
-                source_images.append(image.copy())
-                debug_manager.save_source_image(image, page_num + 1)
             
             # Preprocess image (with debug output if enabled)
-            processed_image = preprocessor.preprocess_array(image, page_num=page_num + 1)
+            (processed_image, img_width, img_height) = preprocessor.preprocess(image_path, page_num=page_num + 1)
             
             # Run OCR
             words = ocr.detect_and_recognize(processed_image)
@@ -160,14 +169,15 @@ def process_command(
             
             all_words.extend(normalized_words)
         
-        # Try LayoutLM inference if model is available and not skipped
+        # Try model inference if not skipped
         model_predictions = None
-        if all_words and not skip_model:
+        if not skip_model:
             try:
-                from ..models.layoutlmv3 import LayoutLMv3Model
+                from ..models import get_model
                 
-                logger.info("Running LayoutLMv3 model inference...")
-                model = LayoutLMv3Model(
+                logger.info(f"Running {model_type} model inference...")
+                model = get_model(
+                    model_type,
                     model_name_or_path=model_name,
                     device=actual_device
                 )
@@ -176,23 +186,28 @@ def process_command(
                 # Get first page image for visual features
                 first_image = load_image(image_paths[0])
                 
-                # Prepare tokens and boxes
-                tokens = [w['text'] for w in all_words]
-                boxes = [w['box'] for w in all_words]
+                # Prepare tokens and boxes for models that need them
+                tokens = [w['text'] for w in all_words] if all_words else []
+                boxes = [w['box'] for w in all_words] if all_words else []
                 
                 # Run prediction
-                model_result = model.predict_from_words(
-                    words=tokens,
-                    boxes=boxes,
-                    image=first_image
-                )
-                
-                if model_result.get("entities"):
-                    model_predictions = model_result["entities"]
-                    logger.info(f"Model extracted {len(model_predictions)} entities")
+                # Donut and IDEFICS2 can work without OCR words
+                # LayoutLMv3 requires OCR words
+                if model_type == "layoutlmv3" and not all_words:
+                    logger.warning("LayoutLMv3 requires OCR words. Skipping model inference.")
+                else:
+                    model_result = model.predict_from_words(
+                        words=tokens,
+                        boxes=boxes,
+                        image=first_image
+                    )
+                    
+                    if model_result.get("entities"):
+                        model_predictions = model_result["entities"]
+                        logger.info(f"Model extracted entities: {list(model_predictions.keys())}")
                 
             except Exception as e:
-                logger.warning(f"LayoutLMv3 inference failed: {e}. Using heuristic extraction.")
+                logger.warning(f"{model_type} inference failed: {e}. Using heuristic extraction.")
         
         # Extract fields using heuristics (and model predictions if available)
         if all_words:
@@ -255,7 +270,8 @@ def process_command(
 def version_command() -> None:
     """Display version information."""
     print(f"Receipt OCR Service v{VERSION}")
-    print("PaddleOCR + LayoutLMv3")
+    print("Models: Donut (default), IDEFICS2, LayoutLMv3")
+    print("OCR: PaddleOCR, Tesseract (fallback)")
     
     # Check available dependencies
     deps = []
@@ -289,6 +305,11 @@ def version_command() -> None:
     print("\nDependencies:")
     for dep in deps:
         print(f"  - {dep}")
+    
+    print("\nSupported Models:")
+    print("  - Donut (naver-clova-ix/donut-base-finetuned-cord-v2) - MIT license")
+    print("  - IDEFICS2 (HuggingFaceM4/idefics2-8b) - Apache 2.0 license")
+    print("  - LayoutLMv3 (microsoft/layoutlmv3-base) - requires OCR")
 
 
 def normalize_boxes(

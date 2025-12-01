@@ -1,11 +1,31 @@
 """
 Image preprocessing utilities for receipt OCR.
 
-Includes denoising, deskewing, normalization, and other image enhancement operations.
+Uses ImageMagick CLI for optimal image processing and Tesseract compatibility.
+
+Preprocessing pipeline order for best OCR accuracy:
+1. Deskew (rotation correction)
+2. Contrast enhancement
+3. Grayscale conversion
+4. Remove background
+5. Denoise
+6. Convert to TIFF format
+7. Fix resolution (300 DPI) - last step to avoid large intermediate files
+
+Note: Resolution is set last to avoid creating large intermediate files.
+Tesseract has a maximum image size limit of 32767 pixels per dimension.
+The preprocessor will automatically reduce DPI if the resampled image would exceed this limit.
+
+Shell scripts are located in the scripts/ directory and can be run manually for debugging.
 """
 
 import logging
-from typing import Tuple, Optional, Any, TYPE_CHECKING
+import subprocess
+import tempfile
+import os
+import shutil
+from pathlib import Path
+from typing import Optional, Tuple, TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
@@ -13,18 +33,41 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Get the scripts directory path
+SCRIPTS_DIR = Path(__file__).parent.parent.parent / "scripts"
+
+# Tesseract maximum image dimension (32767 pixels)
+TESSERACT_MAX_DIMENSION = 32767
+
+# Pillow maximum pixel count (178956970 pixels) - to prevent DOS attacks
+PILLOW_MAX_PIXELS = 178956970
+
 
 class ImagePreprocessor:
     """
     Preprocesses receipt images to improve OCR accuracy.
     
-    Operations include:
-    - Grayscale conversion
-    - Denoising
-    - Deskewing
-    - DPI normalization
-    - Contrast enhancement
-    - Adaptive thresholding
+    Uses ImageMagick CLI for image processing operations.
+    
+    Preprocessing pipeline order:
+    1. Deskew - correct rotation/skew
+    2. Contrast enhancement - improve text visibility
+    3. Grayscale - convert to grayscale
+    4. Remove background - isolate text from background noise
+    5. Denoise - reduce noise while preserving edges
+    6. Convert to TIFF - optimal format for Tesseract OCR
+    7. Fix resolution - ensure optimal DPI for best OCR results (last step)
+    
+    Note: Resolution is set as the last step to avoid creating large intermediate files.
+    The preprocessor automatically reduces DPI if the resampled image would exceed
+    Tesseract's maximum dimension limit (32767 pixels).
+    
+    Configurable parameters:
+    - fuzz_percent: Tolerance for background removal (0-100%)
+    - deskew_threshold: Sensitivity for skew detection (0-100%)
+    - contrast_type: 'sigmoidal', 'linear', or 'none'
+    - contrast_strength: Intensity for sigmoidal contrast (1-10 typical)
+    - contrast_midpoint: Midpoint for sigmoidal contrast (0-200%, >100 brightens)
     """
     
     def __init__(
@@ -33,428 +76,445 @@ class ImagePreprocessor:
         denoise: bool = True,
         deskew: bool = True,
         enhance_contrast: bool = True,
-        debug_manager: Optional['DebugOutputManager'] = None
+        debug_manager: Optional['DebugOutputManager'] = None,
+        fuzz_percent: int = 30,
+        deskew_threshold: int = 40,
+        contrast_type: str = "sigmoidal",
+        contrast_strength: float = 3,
+        contrast_midpoint: int = 120
     ):
         """
         Initialize preprocessor.
         
         Args:
-            target_dpi: Target DPI for normalization
+            target_dpi: Target DPI for resolution normalization (default 300)
             denoise: Whether to apply denoising
             deskew: Whether to correct skew
             enhance_contrast: Whether to enhance contrast
             debug_manager: Optional DebugOutputManager for saving intermediate steps
+            fuzz_percent: Fuzz percentage for background removal (0-100, default 30)
+            deskew_threshold: Deskew threshold percentage (0-100, default 40)
+            contrast_type: Contrast type - 'sigmoidal', 'linear', or 'none' (default 'sigmoidal')
+            contrast_strength: Contrast strength for sigmoidal (1-10 typical, default 3)
+            contrast_midpoint: Contrast midpoint for sigmoidal (0-200%, default 120)
         """
         self.target_dpi = target_dpi
         self.denoise = denoise
         self.deskew = deskew
         self.enhance_contrast = enhance_contrast
         self.debug_manager = debug_manager
+        self.fuzz_percent = fuzz_percent
+        self.deskew_threshold = deskew_threshold
+        self.contrast_type = contrast_type
+        self.contrast_strength = contrast_strength
+        self.contrast_midpoint = contrast_midpoint
+        
+        # Verify ImageMagick is installed
+        self._check_imagemagick()
     
-    def preprocess(self, image_path: str, page_num: int = 1) -> np.ndarray:
+    def _check_imagemagick(self):
+        """Check if ImageMagick is installed and available."""
+        try:
+            result = subprocess.run(
+                ["magick", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.debug(f"ImageMagick version: {result.stdout.split('\n')[0]}")
+                return
+        except FileNotFoundError:
+            pass
+        except subprocess.TimeoutExpired:
+            pass
+        
+        raise RuntimeError(
+            "ImageMagick is not installed. Please install it:\n"
+            "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+            "  macOS: brew install imagemagick\n"
+            "  Windows: Download from https://imagemagick.org/script/download.php"
+        )
+    
+    def _run_script(self, script_name: str, *args) -> bool:
         """
-        Preprocess image for OCR.
+        Run a preprocessing shell script.
+        
+        Args:
+            script_name: Name of the script (without path)
+            *args: Arguments to pass to the script
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        script_path = SCRIPTS_DIR / script_name
+        
+        if not script_path.exists():
+            logger.error(f"Script not found: {script_path}")
+            return False
+        
+        try:
+            cmd = [str(script_path)] + [str(arg) for arg in args]
+            logger.debug(f"Running: {' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"Script {script_name} failed: {result.stderr}")
+                return False
+            
+            logger.debug(f"Script output: {result.stdout.strip()}")
+            return True
+            
+        except subprocess.TimeoutExpired:
+            logger.error(f"Script {script_name} timed out")
+            return False
+        except Exception as e:
+            logger.error(f"Error running script {script_name}: {e}")
+            return False
+    
+    def _run_imagemagick_cmd(self, args: list) -> bool:
+        """
+        Run an ImageMagick command directly.
+        
+        Uses 'magick' command (ImageMagick 7+).
+        
+        Args:
+            args: Arguments to pass to the ImageMagick command
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            cmd = ["magick"] + args
+            logger.debug(f"Running: {' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"ImageMagick command failed: {result.stderr}")
+                return False
+            
+            return True
+            
+        except subprocess.TimeoutExpired:
+            logger.error("ImageMagick command timed out")
+            return False
+        except Exception as e:
+            logger.error(f"Error running ImageMagick: {e}")
+            return False
+    
+    def _get_image_info(self, image_path: str) -> Tuple[int, int, float, float]:
+        """
+        Get image dimensions and DPI using ImageMagick identify.
+        
+        Args:
+            image_path: Path to image file
+            
+        Returns:
+            Tuple of (width, height, x_dpi, y_dpi)
+        """
+        try:
+            result = subprocess.run(
+                ["magick", "identify", "-format", "%w %h %x %y", image_path],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                parts = result.stdout.strip().split()
+                if len(parts) >= 4:
+                    width = int(parts[0])
+                    height = int(parts[1])
+                    # DPI might have units like "72 PixelsPerInch", extract just the number
+                    x_dpi = float(parts[2].split()[0]) if parts[2] else 72.0
+                    y_dpi = float(parts[3].split()[0]) if parts[3] else 72.0
+                    return width, height, x_dpi, y_dpi
+        except Exception as e:
+            logger.warning(f"Failed to get image info: {e}")
+        
+        # Default values if identification fails
+        return 0, 0, 72.0, 72.0
+    
+    def _calculate_resampled_dimensions(
+        self, 
+        width: int, 
+        height: int, 
+        current_dpi: float, 
+        target_dpi: int
+    ) -> Tuple[int, int]:
+        """
+        Calculate what the image dimensions would be after resampling.
+        
+        Args:
+            width: Current width in pixels
+            height: Current height in pixels
+            current_dpi: Current DPI
+            target_dpi: Target DPI
+            
+        Returns:
+            Tuple of (new_width, new_height)
+        """
+        if current_dpi <= 0:
+            current_dpi = 72.0  # Default DPI
+        
+        scale_factor = target_dpi / current_dpi
+        new_width = int(width * scale_factor)
+        new_height = int(height * scale_factor)
+        
+        return new_width, new_height
+    
+    def _find_safe_dpi(
+        self, 
+        width: int, 
+        height: int, 
+        current_dpi: float
+    ) -> Optional[int]:
+        """
+        Find a safe DPI that won't exceed Tesseract's or Pillow's size limits.
+        
+        Tries target_dpi first, then reduces in increments of 50 down to 100 DPI.
+        Returns None if even 100 DPI would exceed limits.
+        
+        Checks:
+        - Tesseract max dimension: 32767 pixels per dimension
+        - Pillow max pixels: 178956970 total pixels (to prevent DOS attacks)
+        
+        Args:
+            width: Current width in pixels
+            height: Current height in pixels
+            current_dpi: Current DPI
+            
+        Returns:
+            Safe DPI value, or None if no safe DPI exists
+        """
+        # Try DPI values from target down to 100 in increments of 50
+        for test_dpi in range(self.target_dpi, 99, -50):
+            new_width, new_height = self._calculate_resampled_dimensions(
+                width, height, current_dpi, test_dpi
+            )
+            
+            # Check both Tesseract dimension limit and Pillow pixel limit
+            total_pixels = new_width * new_height
+            within_tesseract_limit = (
+                new_width <= TESSERACT_MAX_DIMENSION and 
+                new_height <= TESSERACT_MAX_DIMENSION
+            )
+            within_pillow_limit = total_pixels <= PILLOW_MAX_PIXELS
+            
+            if within_tesseract_limit and within_pillow_limit:
+                if test_dpi != self.target_dpi:
+                    logger.info(
+                        f"Reduced target DPI from {self.target_dpi} to {test_dpi} "
+                        f"to stay within limits ({new_width}x{new_height} = {total_pixels} pixels)"
+                    )
+                return test_dpi
+        
+        # Even 100 DPI is too large
+        logger.warning(
+            f"Image would exceed size limits even at 100 DPI. "
+            f"Skipping resolution adjustment."
+        )
+        return None
+    
+    def preprocess(self, image_path: str, page_num: int = 1) -> Tuple[np.ndarray, int, int]:
+        """
+        Preprocess image for OCR using ImageMagick CLI.
+        
+        Pipeline order: Deskew -> Contrast -> Grayscale -> Remove Background -> 
+                       Denoise -> TIFF -> Resolution
         
         Args:
             image_path: Path to image file
             page_num: Page number for debug output
             
         Returns:
-            Preprocessed image as numpy array
+            Tuple of (preprocessed image as numpy array (RGB), width, height)
         """
         logger.info(f"Preprocessing image: {image_path}")
         
+        # Create temp directory for intermediate files
+        temp_dir = tempfile.mkdtemp(prefix="ocr_preprocess_")
+        
         try:
-            from PIL import Image
-            import cv2
+            current_file = image_path
+            step = 1
             
-            # 1. Load image
-            img = Image.open(image_path)
-            img_array = np.array(img)
+            # Step 1: Deskew (optional)
+            if self.deskew:
+                logger.info(f"Step {step}: Deskewing (threshold: {self.deskew_threshold}%)...")
+                next_file = os.path.join(temp_dir, f"step{step}_deskew.jpg")
+                if not self._run_imagemagick_cmd([
+                    current_file, "-deskew", f"{self.deskew_threshold}%", "-background", "white", "+repage", next_file
+                ]):
+                    raise RuntimeError("Failed to deskew")
+                current_file = next_file
+                self._save_debug_image(next_file, "deskewed", page_num)
+                step += 1
             
-            return self.preprocess_array(img_array, page_num=page_num)
             
-        except ImportError as e:
-            logger.error(f"Required dependencies not available: {e}")
-            raise ImportError(
-                "OpenCV and Pillow are required. Install with: pip install opencv-python Pillow"
-            )
-    
-    def preprocess_array(self, img_array: np.ndarray, page_num: int = 1) -> np.ndarray:
-        """
-        Preprocess a numpy array image.
-        
-        Args:
-            img_array: Image as numpy array
-            page_num: Page number for debug output
+            # Step 3: Grayscale
+            logger.info(f"Step {step}: Converting to grayscale...")
+            next_file = os.path.join(temp_dir, f"step{step}_gray.jpg")
+            if not self._run_imagemagick_cmd([
+                current_file, "-colorspace", "Gray", next_file
+            ]):
+                raise RuntimeError("Failed to convert to grayscale")
+            current_file = next_file
+            self._save_debug_image(next_file, "grayscale", page_num)
+            step += 1
             
-        Returns:
-            Preprocessed image as numpy array (RGB)
-        """
-        try:
-            import cv2
-        except ImportError:
-            logger.warning("OpenCV not available, returning original image")
-            return img_array
-        
-        # 2. Convert to grayscale if needed
-        if len(img_array.shape) == 3:
-            if img_array.shape[2] == 4:  # RGBA
-                img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
-            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = img_array.copy()
-        
-        # Save grayscale debug image
-        if self.debug_manager:
-            self.debug_manager.save_grayscale_image(gray, page_num)
-        
-        # 3. Denoise
-        if self.denoise:
-            gray = self._denoise(gray)
-            # Save denoised debug image
-            if self.debug_manager:
-                self.debug_manager.save_denoised_image(gray, page_num)
-        
-        # 4. Deskew
-        if self.deskew:
-            gray = self._deskew(gray)
-            # Save deskewed debug image
-            if self.debug_manager:
-                self.debug_manager.save_deskewed_image(gray, page_num)
-        
-        # 5. Normalize DPI (resize to target height)
-        gray = self._normalize_dpi(gray)
-        
-        # 6. Enhance contrast
-        if self.enhance_contrast:
-            gray = self._enhance_contrast(gray)
-            # Save contrast enhanced debug image
-            if self.debug_manager:
-                self.debug_manager.save_contrast_enhanced_image(gray, page_num)
-        
-        # Convert back to RGB for OCR engines
-        result = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
-        
-        # Save final preprocessed debug image
-        if self.debug_manager:
-            self.debug_manager.save_preprocessed_image(result, page_num)
-        
-        return result
-    
-    def _denoise(self, image: np.ndarray) -> np.ndarray:
-        """
-        Apply denoising filter.
-        
-        Uses bilateral filter to preserve edges while removing noise.
-        
-        Args:
-            image: Grayscale image
-            
-        Returns:
-            Denoised image
-        """
-        try:
-            import cv2
-            
-            # Bilateral filter parameters:
-            # d=9: Diameter of each pixel neighborhood
-            # sigmaColor=75: Filter sigma in the color space
-            # sigmaSpace=75: Filter sigma in the coordinate space
-            denoised = cv2.bilateralFilter(image, 9, 75, 75)
-            logger.debug("Applied bilateral denoising filter")
-            return denoised
-            
-        except Exception as e:
-            logger.warning(f"Denoising failed: {e}")
-            return image
-    
-    def _deskew(self, image: np.ndarray) -> np.ndarray:
-        """
-        Detect and correct image skew.
-        
-        Uses adaptive thresholding and morphological operations to detect text lines,
-        then applies Hough line transform to calculate the skew angle.
-        
-        Args:
-            image: Grayscale image
-            
-        Returns:
-            Deskewed image
-        """
-        try:
-            import cv2
-            
-            # Apply bilateral filter to reduce noise while preserving edges
-            filtered = cv2.bilateralFilter(image, 9, 75, 75)
-            
-            # Apply adaptive threshold to create binary image with text as foreground
-            binary = cv2.adaptiveThreshold(
-                filtered, 255, 
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                cv2.THRESH_BINARY_INV, 
-                11, 2
-            )
-            
-            # Use Canny edge detection on binary image
-            edges = cv2.Canny(binary, 50, 150, apertureSize=3)
-            
-            # Morphological dilation to connect text characters into horizontal lines
-            # The kernel width of 30 pixels is tuned to bridge typical character spacing
-            # while the height of 1 preserves horizontal line detection sensitivity
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
-            dilated = cv2.dilate(edges, kernel, iterations=1)
-            
-            # Use Hough line transform with relaxed parameters
-            lines = cv2.HoughLinesP(
-                dilated, 
-                rho=1, 
-                theta=np.pi / 180, 
-                threshold=50,       # Lower threshold to detect more lines
-                minLineLength=50,   # Shorter minimum line length
-                maxLineGap=20       # Allow larger gaps between line segments
-            )
-            
-            if lines is None or len(lines) == 0:
-                logger.debug("No lines detected for deskew")
-                return image
-            
-            # Calculate angles of detected lines
-            # Only consider lines longer than 30 pixels to filter out noise
-            # from short edge fragments that don't represent actual text lines
-            min_line_length = 30
-            angles = []
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                if x2 - x1 != 0 and length > min_line_length:
-                    angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-                    # Only consider near-horizontal lines (within 30 degrees)
-                    # These represent text lines on a receipt
-                    if abs(angle) < 30:
-                        angles.append(angle)
-            
-            if not angles:
-                logger.debug("No near-horizontal lines found for deskew")
-                return image
-            
-            # Use median angle to be robust against outliers
-            angle = np.median(angles)
-            
-            # Only correct if angle is significant (> 0.5 degrees)
-            if abs(angle) < 0.5:
-                logger.debug(f"Skew angle ({angle:.2f}°) too small, skipping correction")
-                return image
-            
-            logger.debug(f"Detected {len(angles)} text lines, median angle: {angle:.2f}°")
-            
-            # Get image dimensions
-            (h, w) = image.shape[:2]
-            center = (w // 2, h // 2)
-            
-            # Create rotation matrix to straighten text
-            # cv2.getRotationMatrix2D(center, angle, scale) rotates the image
-            # by 'angle' degrees around the center point
-            M = cv2.getRotationMatrix2D(center, angle, 1.0)
-            
-            # Calculate new bounding box size to avoid cutting off content
-            cos_val = np.abs(np.cos(np.radians(angle)))
-            sin_val = np.abs(np.sin(np.radians(angle)))
-            new_w = int(h * sin_val + w * cos_val)
-            new_h = int(h * cos_val + w * sin_val)
-            
-            # Adjust the rotation matrix to account for the new size
-            M[0, 2] += (new_w - w) / 2
-            M[1, 2] += (new_h - h) / 2
-            
-            # Apply rotation with expanded canvas to prevent content cutoff
-            rotated = cv2.warpAffine(
-                image, M, (new_w, new_h),
-                flags=cv2.INTER_CUBIC,
-                borderMode=cv2.BORDER_REPLICATE
-            )
-            
-            logger.info(f"Applied deskew correction: {angle:.2f} degrees")
-            return rotated
-            
-        except Exception as e:
-            logger.warning(f"Deskewing failed: {e}")
-            return image
-    
-    def _normalize_dpi(self, image: np.ndarray) -> np.ndarray:
-        """
-        Resize image to target DPI equivalent.
-        
-        For 300 DPI, target height is typically around 1600-2000 pixels.
-        
-        Args:
-            image: Grayscale image
-            
-        Returns:
-            Resized image
-        """
-        try:
-            import cv2
-            
-            # Calculate target height based on DPI
-            # Assuming original is ~72 DPI (screen resolution)
-            # scale = target_dpi / 72
-            # For 300 DPI, we want approximately 1600px height
-            target_height = 1600
-            
-            current_height = image.shape[0]
-            
-            # Only resize if current height is significantly different
-            if abs(current_height - target_height) < 100:
-                logger.debug("Image height already near target, skipping resize")
-                return image
-            
-            # Calculate scale
-            scale = target_height / current_height
-            new_width = int(image.shape[1] * scale)
-            
-            # Choose interpolation method based on scale direction
-            if scale > 1:
-                interpolation = cv2.INTER_CUBIC  # Upscaling
-            else:
-                interpolation = cv2.INTER_AREA  # Downscaling
-            
-            resized = cv2.resize(image, (new_width, target_height), interpolation=interpolation)
-            logger.debug(f"Resized image from {current_height}px to {target_height}px height")
-            return resized
-            
-        except Exception as e:
-            logger.warning(f"DPI normalization failed: {e}")
-            return image
-    
-    def _enhance_contrast(self, image: np.ndarray) -> np.ndarray:
-        """
-        Enhance image contrast using CLAHE.
-        
-        CLAHE (Contrast Limited Adaptive Histogram Equalization) provides
-        better results for text than simple histogram equalization.
-        
-        Args:
-            image: Grayscale image
-            
-        Returns:
-            Contrast-enhanced image
-        """
-        try:
-            import cv2
-            
-            # Create CLAHE object
-            # clipLimit: Threshold for contrast limiting
-            # tileGridSize: Size of grid for histogram equalization
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            enhanced = clahe.apply(image)
-            
-            logger.debug("Applied CLAHE contrast enhancement")
-            return enhanced
-            
-        except Exception as e:
-            logger.warning(f"Contrast enhancement failed: {e}")
-            return image
-    
-    def detect_and_crop(self, image: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """
-        Detect receipt boundaries and crop.
-        
-        Args:
-            image: Input image
-            
-        Returns:
-            Tuple of (cropped_image, crop_mask)
-        """
-        try:
-            import cv2
-            
-            # Convert to grayscale if needed
-            if len(image.shape) == 3:
-                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            else:
-                gray = image.copy()
-            
-            # Apply Gaussian blur
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            
-            # Edge detection
-            edges = cv2.Canny(blurred, 75, 200)
-            
-            # Find contours
-            contours, _ = cv2.findContours(
-                edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
-            )
-            
-            if not contours:
-                return image, None
-            
-            # Sort contours by area (largest first)
-            contours = sorted(contours, key=cv2.contourArea, reverse=True)
-            
-            # Find the largest quadrilateral contour
-            for contour in contours[:5]:
-                # Approximate contour to polygon
-                peri = cv2.arcLength(contour, True)
-                approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+            # Step 4: Remove background
+            logger.info(f"Step {step}: Removing background (fuzz: {self.fuzz_percent}%)...")
+            next_file = os.path.join(temp_dir, f"step{step}_nobg.jpg")
+            if not self._run_imagemagick_cmd([
+                current_file, "-fuzz", f"{self.fuzz_percent}%", "-transparent", "white",
+                "-background", "white", "-alpha", "remove", "-auto-level", next_file
+            ]):
+                raise RuntimeError("Failed to remove background")
+            current_file = next_file
+            self._save_debug_image(next_file, "background_removed", page_num)
+            step += 1
+
+             # Step 5: Contrast enhancement (optional)
+            if self.enhance_contrast and self.contrast_type != "none":
+                logger.info(f"Step {step}: Enhancing contrast (type: {self.contrast_type})...")
+                next_file = os.path.join(temp_dir, f"step{step}_contrast.jpg")
                 
-                # If polygon has 4 vertices, it's likely the receipt
-                if len(approx) == 4:
-                    # Get bounding rectangle
-                    x, y, w, h = cv2.boundingRect(approx)
-                    
-                    # Check if area is significant (at least 10% of image)
-                    if w * h > 0.1 * image.shape[0] * image.shape[1]:
-                        cropped = image[y:y+h, x:x+w]
-                        mask = np.zeros_like(gray)
-                        cv2.drawContours(mask, [approx], -1, 255, -1)
-                        logger.info(f"Detected receipt boundaries: {w}x{h} at ({x}, {y})")
-                        return cropped, mask
+                if self.contrast_type == "sigmoidal":
+                    # Sigmoidal contrast: -sigmoidal-contrast strength x midpoint%
+                    contrast_arg = f"{self.contrast_strength}x{self.contrast_midpoint}%"
+                    if not self._run_imagemagick_cmd([
+                        current_file, "-auto-level", "-sigmoidal-contrast", contrast_arg, next_file
+                    ]):
+                        raise RuntimeError("Failed to enhance contrast")
+                elif self.contrast_type == "linear":
+                    # Linear contrast: just auto-level (histogram stretch)
+                    if not self._run_imagemagick_cmd([
+                        current_file, "-auto-level", next_file
+                    ]):
+                        raise RuntimeError("Failed to enhance contrast")
+                
+                current_file = next_file
+                self._save_debug_image(next_file, "contrast_enhanced", page_num)
+                step += 1
+
             
-            # No significant quadrilateral found
-            logger.debug("No clear receipt boundaries detected")
-            return image, None
+            # Step 5: Denoise (optional)
+            if self.denoise:
+                logger.info(f"Step {step}: Denoising...")
+                next_file = os.path.join(temp_dir, f"step{step}_denoise.jpg")
+                if not self._run_imagemagick_cmd([
+                    current_file, "-enhance", next_file
+                ]):
+                    raise RuntimeError("Failed to denoise")
+                current_file = next_file
+                self._save_debug_image(next_file, "denoised", page_num)
+                step += 1
             
-        except Exception as e:
-            logger.warning(f"Receipt detection failed: {e}")
-            return image, None
-    
-    def adaptive_threshold(self, image: np.ndarray) -> np.ndarray:
-        """
-        Apply adaptive thresholding for binarization.
-        
-        Args:
-            image: Grayscale image
+            # Step 6: Convert to TIFF
+            logger.info(f"Step {step}: Converting to TIFF...")
+            next_file = os.path.join(temp_dir, f"step{step}_convert.tiff")
+            if not self._run_imagemagick_cmd([current_file, "-compress", "lzw", next_file]):
+                raise RuntimeError(f"Failed to convert to TIFF")
+            current_file = next_file
+            self._save_debug_image(next_file, "convert", page_num)
+            step += 1
             
-        Returns:
-            Binary image
-        """
-        try:
-            import cv2
+            # Step 7: Fix resolution (with size limit checking)
+            logger.info(f"Step {step}: Checking resolution...")
+            width, height, x_dpi, y_dpi = self._get_image_info(current_file)
+            current_dpi = min(x_dpi, y_dpi) if x_dpi > 0 and y_dpi > 0 else 72.0
             
-            # Ensure grayscale
-            if len(image.shape) == 3:
-                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            logger.info(f"Current image: {width}x{height} at {current_dpi:.0f} DPI")
+            
+            # Find a safe DPI that won't exceed Tesseract/Pillow limits
+            safe_dpi = self._find_safe_dpi(width, height, current_dpi)
+            
+            if safe_dpi is not None:
+                logger.info(f"Step {step}: Fixing resolution to {safe_dpi} DPI...")
+                next_file = os.path.join(temp_dir, f"step{step}_resolution.tiff")
+                if not self._run_imagemagick_cmd([
+                    current_file, "-resample", str(safe_dpi), 
+                    "-units", "PixelsPerInch", next_file
+                ]):
+                    raise RuntimeError(f"Failed to fix resolution to {safe_dpi} DPI")
+                current_file = next_file
+                self._save_debug_image(next_file, "resolution_fixed", page_num)
             else:
-                gray = image
+                logger.warning(
+                    f"Skipping resolution adjustment - image at {current_dpi:.0f} DPI "
+                    f"would exceed size limits at any higher DPI"
+                )
             
-            # Apply adaptive threshold
-            # ADAPTIVE_THRESH_GAUSSIAN_C: Weighted sum of neighborhood values
-            # THRESH_BINARY: Output is 0 or maxValue
-            # 11: Size of neighborhood area
-            # 2: Constant subtracted from mean
-            binary = cv2.adaptiveThreshold(
-                gray,
-                255,
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                cv2.THRESH_BINARY,
-                11,
-                2
+            # Load the final preprocessed image using ImageMagick to convert to RGB PNG
+            # This avoids using Pillow for loading the TIFF
+            logger.info("Finished preprocessing image, prepaering for OCR")
+            # Now load the PNG as numpy array - we need Pillow here for numpy conversion
+            # This is the minimal Pillow usage required for OCR engine compatibility
+            from PIL import Image
+            pil_img = Image.open(current_file)
+            result = np.array(pil_img)
+            
+            # Get final dimensions
+            final_height, final_width = result.shape[:2]
+            
+            # Ensure RGB format
+            if len(result.shape) == 2:
+                # Grayscale, convert to RGB
+                result = np.stack([result, result, result], axis=-1)
+            elif result.shape[2] == 4:
+                # RGBA, drop alpha
+                result = result[:, :, :3]
+            
+            # Save final preprocessed debug image
+            if self.debug_manager:
+                self.debug_manager.save_preprocessed_image(result, page_num)
+            
+            logger.info(f"Preprocessing complete: {final_width}x{final_height}")
+            return result, final_width, final_height
+            
+        finally:
+            # Clean up temp directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    def _save_debug_image(self, image_path: str, step_name: str, page_num: int):
+        """Save a debug image for the current step.
+        
+        Copies the image file directly to the debug output job folder to preserve 
+        the original format and avoid unintended conversions.
+        """
+        if not self.debug_manager:
+            return
+        try:
+            # Get the original file extension to preserve format
+            _, ext = os.path.splitext(image_path)
+            if not ext:
+                ext = ".tiff"
+            
+            # Use job_dir from debug manager (the proper job folder)
+            debug_dir = self.debug_manager.job_dir if hasattr(self.debug_manager, 'job_dir') else (
+                self.debug_manager.output_dir if hasattr(self.debug_manager, 'output_dir') else tempfile.gettempdir()
             )
             
-            logger.debug("Applied adaptive thresholding")
-            return binary
+            debug_path = os.path.join(
+                str(debug_dir),
+                f"page_{page_num}_{step_name}{ext}"
+            )
             
+            # Copy the file directly to preserve format (no conversion)
+            shutil.copy2(image_path, debug_path)
+            logger.debug(f"Saved debug image: {debug_path}")
         except Exception as e:
-            logger.warning(f"Adaptive thresholding failed: {e}")
-            return image
+            logger.warning(f"Failed to save debug image for {step_name}: {e}")

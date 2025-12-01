@@ -18,6 +18,10 @@ torchvision>=0.15.0
 transformers>=4.30.0
 datasets>=2.14.0
 
+# Model optimization (for IDEFICS2 4-bit quantization)
+accelerate>=0.20.0
+bitsandbytes>=0.41.0; sys_platform == 'linux'  # 4-bit quantization (Linux only)
+
 # LayoutLM and document understanding
 layoutparser>=0.3.4
 
@@ -32,6 +36,7 @@ pydantic>=2.0.0
 
 # Image preprocessing
 scipy>=1.11.0
+# Note: ImageMagick CLI is required - see README.md for installation instructions
 
 # Testing
 pytest>=7.4.0

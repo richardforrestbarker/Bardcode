@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
     'model': {
-        'name_or_path': 'microsoft/layoutlmv3-base',
+        'name_or_path': 'naver-clova-ix/donut-base-finetuned-cord-v2',
+        'type': 'donut',  # donut, idefics2, or layoutlmv3
         'device': 'auto',
-        'num_labels': 13,
+        'num_labels': 13,  # Only used for layoutlmv3
     },
     'ocr': {
         'engine': 'paddle',
@@ -27,6 +28,12 @@ DEFAULT_CONFIG = {
         'denoise': True,
         'deskew': True,
         'enhance_contrast': True,
+        # ImageMagick preprocessing parameters
+        'fuzz_percent': 30,  # Fuzz percentage for background removal (0-100)
+        'deskew_threshold': 40,  # Deskew threshold percentage (0-100)
+        'contrast_type': 'sigmoidal',  # Contrast type: 'sigmoidal', 'linear', or 'none'
+        'contrast_strength': 3,  # Contrast strength (for sigmoidal: 1-10 typical)
+        'contrast_midpoint': 120,  # Contrast midpoint percentage (for sigmoidal: 0-200)
     },
     'postprocessing': {
         'min_confidence': 0.5,

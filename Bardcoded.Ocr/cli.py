@@ -49,6 +49,7 @@ def main():
                 image_paths=args.images,
                 output_path=args.output,
                 model_name=args.model,
+                model_type=args.model_type,
                 ocr_engine=args.ocr_engine,
                 device=args.device,
                 denoise=args.denoise,
@@ -57,7 +58,12 @@ def main():
                 skip_model=args.skip_model,
                 verbose=args.verbose,
                 debug=args.debug,
-                debug_output_dir=args.debug_output_dir
+                debug_output_dir=args.debug_output_dir,
+                fuzz_percent=args.fuzz_percent,
+                deskew_threshold=args.deskew_threshold,
+                contrast_type=args.contrast_type,
+                contrast_strength=args.contrast_strength,
+                contrast_midpoint=args.contrast_midpoint
             )
             
             if not args.output:

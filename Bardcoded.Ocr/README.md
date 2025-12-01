@@ -1,6 +1,6 @@
 # Receipt OCR Service
 
-Python-based receipt OCR service using PaddleOCR and LayoutLMv3 for structured data extraction.
+Python-based receipt OCR service using PaddleOCR and open-source models (Donut, IDEFICS2) for structured data extraction.
 
 ## Python Requirements
 
@@ -11,15 +11,26 @@ Python-based receipt OCR service using PaddleOCR and LayoutLMv3 for structured d
 
 This service provides OCR and structured field extraction from receipt images using:
 - **PaddleOCR (PP-StructureV3)**: Text detection and recognition
-- **LayoutLMv3**: Layout-aware field extraction (vendor, date, total, line items, etc.)
+- **Donut (default)**: OCR-free document understanding transformer (MIT license)
+- **IDEFICS2**: Multimodal vision-language model (Apache 2.0 license)
+- **LayoutLMv3**: Layout-aware field extraction (requires OCR first)
 
 ## Features
 
 - Multi-page receipt processing
 - Token-to-bounding-box mapping
-- Configurable model selection (LayoutLMv3, LayoutLMv2, Donut)
+- Configurable model selection (Donut, IDEFICS2, LayoutLMv3)
 - GPU acceleration with CPU fallback
 - CLI interface for integration with .NET API
+- Open-source models with permissive licenses
+
+## Supported Models
+
+| Model | License | OCR Required | Memory | Best For |
+|-------|---------|--------------|--------|----------|
+| Donut | MIT | No | ~2GB | Fast processing, receipt-specific |
+| IDEFICS2 | Apache 2.0 | No | ~16GB (4-bit: ~6GB) | High accuracy, flexible |
+| LayoutLMv3 | - | Yes | ~2GB | Token classification tasks |
 
 ## Setup
 
@@ -70,6 +81,31 @@ pip install paddleocr
 
 PaddleOCR will automatically download required models on first use.
 
+#### ImageMagick (Required - Image Preprocessing)
+
+ImageMagick is required for the image preprocessing pipeline. It provides optimal image processing for best OCR accuracy.
+
+**On Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install imagemagick
+```
+
+**On macOS:**
+```bash
+brew install imagemagick
+```
+
+**On Windows:**
+1. Download the installer from: https://imagemagick.org/script/download.php
+2. Run the installer and select "Install development headers and libraries for C and C++"
+3. Add ImageMagick to your PATH environment variable (the installer can do this automatically)
+
+**Verify installation:**
+```bash
+magick --version
+```
+
 #### Tesseract (Fallback OCR Engine)
 
 **On Ubuntu/Debian:**
@@ -94,39 +130,42 @@ pip install pytesseract
    pip install pytesseract
    ```
 
-### Downloading LayoutLMv3 Models
+### Downloading Models
 
-The LayoutLMv3 model is automatically downloaded from HuggingFace on first use. However, you can pre-download it:
+Models are automatically downloaded from HuggingFace on first use. You can also pre-download them:
 
-**Option 1: Using HuggingFace CLI (Recommended)**
+#### Donut (Default - Recommended)
+
+Donut is an OCR-free document understanding model with MIT license.
+
 ```bash
-# Install HuggingFace Hub CLI
-pip install huggingface_hub
+# Using HuggingFace CLI
+huggingface-cli download naver-clova-ix/donut-base-finetuned-cord-v2 --local-dir ./models/donut-cord-v2
 
-# Download the base model
+# Or using Python
+from transformers import DonutProcessor, VisionEncoderDecoderModel
+processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+```
+
+#### IDEFICS2
+
+IDEFICS2 is a multimodal vision-language model with Apache 2.0 license. Requires more GPU memory.
+
+```bash
+# Using HuggingFace CLI
+huggingface-cli download HuggingFaceM4/idefics2-8b --local-dir ./models/idefics2-8b
+
+# For 4-bit quantized version (lower memory)
+huggingface-cli download HuggingFaceM4/idefics2-8b-AWQ --local-dir ./models/idefics2-8b-awq
+```
+
+#### LayoutLMv3 (Legacy)
+
+LayoutLMv3 requires OCR to be run first.
+
+```bash
 huggingface-cli download microsoft/layoutlmv3-base --local-dir ./models/layoutlmv3-base
-
-# Or download a fine-tuned receipt model (if available)
-huggingface-cli download your-username/layoutlmv3-receipts --local-dir ./models/layoutlmv3-receipts
-```
-
-**Option 2: Using Python**
-```python
-from transformers import AutoProcessor, AutoModelForTokenClassification
-
-# Download and cache the model
-model_name = "microsoft/layoutlmv3-base"
-processor = AutoProcessor.from_pretrained(model_name)
-model = AutoModelForTokenClassification.from_pretrained(model_name)
-
-# Optionally save to local directory
-processor.save_pretrained("./models/layoutlmv3-base")
-model.save_pretrained("./models/layoutlmv3-base")
-```
-
-**Option 3: Manual Download**
-1. Visit https://huggingface.co/microsoft/layoutlmv3-base
-2. Download all files to `./models/layoutlmv3-base`
 3. Use the local path when running the CLI:
    ```bash
    python cli.py process --image receipt.jpg --model ./models/layoutlmv3-base
@@ -154,7 +193,7 @@ python cli.py version
 
 ### Command-line Interface
 
-Process a single receipt:
+Process a single receipt (uses Donut by default):
 
 ```bash
 python cli.py process --image path/to/receipt.jpg --output result.json
@@ -166,10 +205,23 @@ Process multiple pages:
 python cli.py process --image page1.jpg --image page2.jpg --output result.json
 ```
 
-Configure OCR engine and model:
+Use a specific model type:
 
 ```bash
-python cli.py process --image receipt.jpg --output result.json --ocr-engine paddle --model microsoft/layoutlmv3-base --device cuda
+# Use Donut (default, OCR-free, MIT license)
+python cli.py process --image receipt.jpg --output result.json --model-type donut
+
+# Use IDEFICS2 (multimodal, Apache 2.0 license, requires more GPU memory)
+python cli.py process --image receipt.jpg --output result.json --model-type idefics2 --device cuda
+
+# Use LayoutLMv3 (requires OCR first)
+python cli.py process --image receipt.jpg --output result.json --model-type layoutlmv3 --model microsoft/layoutlmv3-base
+```
+
+Configure OCR engine and device:
+
+```bash
+python cli.py process --image receipt.jpg --output result.json --ocr-engine paddle --device cuda
 ```
 
 ### Debug Mode
@@ -209,7 +261,8 @@ The debug output helps diagnose issues in the processing pipeline:
 from src.receipt_processor import ReceiptProcessor
 
 processor = ReceiptProcessor(
-    model_name="microsoft/layoutlmv3-base",
+    model_name="naver-clova-ix/donut-base-finetuned-cord-v2",
+    model_type="donut",
     ocr_engine="paddle",
     device="cuda"
 )
@@ -224,7 +277,8 @@ Configuration file: `config/config.yaml`
 
 ```yaml
 model:
-  name_or_path: "microsoft/layoutlmv3-base"
+  name_or_path: "naver-clova-ix/donut-base-finetuned-cord-v2"
+  type: "donut"  # donut, idefics2, or layoutlmv3
   device: "auto"  # auto, cuda, cpu
   
 ocr:
@@ -235,11 +289,45 @@ preprocessing:
   target_dpi: 300
   denoise: true
   deskew: true
+  enhance_contrast: true
+  # ImageMagick preprocessing parameters
+  fuzz_percent: 30           # Background removal tolerance (0-100)
+  deskew_threshold: 40       # Deskew sensitivity (0-100)
+  contrast_type: sigmoidal   # sigmoidal, linear, or none
+  contrast_strength: 3       # Sigmoidal strength (1-10 typical)
+  contrast_midpoint: 120     # Sigmoidal midpoint (0-200%, >100 brightens)
   
 postprocessing:
   min_confidence: 0.5
   verify_totals: true
 ```
+
+### Preprocessing Parameters
+
+The image preprocessing pipeline supports configurable parameters via CLI or config:
+
+| Parameter | CLI Flag | Default | Description |
+|-----------|----------|---------|-------------|
+| Fuzz % | `--fuzz-percent` | 30 | Tolerance for background removal. Higher values remove more colors similar to white. |
+| Deskew Threshold | `--deskew-threshold` | 40 | Skew detection sensitivity. Lower values are more aggressive. |
+| Contrast Type | `--contrast-type` | sigmoidal | Enhancement algorithm (see below) |
+| Contrast Strength | `--contrast-strength` | 3 | Intensity for sigmoidal contrast (1-10 typical) |
+| Contrast Midpoint | `--contrast-midpoint` | 120 | Midpoint for sigmoidal (>100 brightens, <100 darkens) |
+
+#### Contrast Types
+
+| Type | Description | Best For |
+|------|-------------|----------|
+| `sigmoidal` | Non-linear S-curve contrast using `-sigmoidal-contrast strength x midpoint%`. Preserves highlight and shadow detail while boosting midtones. | Most images, especially photos |
+| `linear` | Simple histogram stretch using `-auto-level`. Stretches the darkest pixel to black and lightest to white. | High-contrast documents |
+| `none` | Skip contrast enhancement entirely. | Already processed images |
+
+**Sigmoidal Parameters:**
+- `contrast_strength` (1-10): Controls the steepness of the S-curve. Higher = more contrast.
+- `contrast_midpoint` (0-200%): The brightness level around which contrast is centered.
+  - Values > 100% brighten the image overall
+  - Values < 100% darken the image overall
+  - 50% targets middle tones (traditional midpoint)
 
 ## Output Format
 
@@ -292,12 +380,107 @@ postprocessing:
 
 ### Pipeline Stages
 
-1. **Image Preprocessing**: Denoise, deskew, normalize DPI
+1. **Image Preprocessing** (via ImageMagick):
+   - Deskew (rotation correction)
+   - Contrast enhancement
+   - Grayscale conversion
+   - Remove background
+   - Denoise
+   - Convert to TIFF
+   - Fix resolution (300 DPI) - last step to avoid large intermediate files
 2. **Text Detection**: PaddleOCR detector finds text regions
 3. **OCR**: PaddleOCR recognizer extracts text with bounding boxes
 4. **Tokenization**: Split text into model tokens, map to boxes
 5. **Model Inference**: LayoutLMv3 identifies field types and entities
 6. **Postprocessing**: Parse values, verify totals, merge multi-page results
+
+### Manual Image Preprocessing
+
+You can run the preprocessing steps manually using ImageMagick before calling the CLI. This is useful for debugging or customizing the preprocessing pipeline.
+
+Shell scripts are provided in the `scripts/` directory for each preprocessing step:
+
+```bash
+# Run all preprocessing steps at once
+./scripts/preprocess_all.sh input.jpg output.tiff
+
+# Or run steps individually:
+
+# Step 1: Deskew (straighten the image)
+./scripts/deskew.sh input.jpg step1.tiff
+
+# Step 2: Enhance contrast
+./scripts/enhance_contrast.sh step1.tiff step2.tiff
+
+# Step 3: Convert to grayscale
+./scripts/grayscale.sh step2.tiff step3.tiff
+
+# Step 4: Remove background
+./scripts/remove_background.sh step3.tiff step4.tiff
+
+# Step 5: Denoise
+./scripts/denoise.sh step4.tiff step5.tiff
+
+# Step 6: Convert to TIFF (optimal format for Tesseract)
+./scripts/convert_to_tiff.sh step5.tiff step6.tiff
+
+# Step 7: Fix resolution to 300 DPI
+./scripts/fix_resolution.sh step6.tiff final.tiff 300
+```
+
+#### Direct ImageMagick Commands
+
+If you prefer to run ImageMagick commands directly without the scripts. Parameters shown with default values:
+
+```bash
+# Step 1: Deskew (threshold: 40%)
+magick input.jpg -deskew 40% -background white step1.tiff
+
+# Step 2: Enhance contrast (sigmoidal: strength 3, midpoint 120%)
+magick step1.tiff -auto-level -sigmoidal-contrast 3x120% step2.tiff
+
+# Step 3: Grayscale
+magick step2.tiff -colorspace Gray step3.tiff
+
+# Step 4: Remove background (fuzz: 30%)
+magick step3.tiff -fuzz 30% -transparent white -background white -alpha remove -auto-level step4.tiff
+
+# Step 5: Denoise
+magick step4.tiff -enhance step5.tiff
+
+# Step 6: Convert to TIFF
+magick step5.tiff -compress lzw step6.tiff
+
+# Step 7: Fix resolution to 300 DPI
+magick step6.tiff -resample 300 -units PixelsPerInch final.tiff
+```
+
+#### All-in-One Command
+
+Run all preprocessing steps in a single ImageMagick command (with default parameter values):
+
+```bash
+magick input.jpg \
+    -deskew 40% -background white \
+    -auto-level -sigmoidal-contrast 3x120% \
+    -colorspace Gray \
+    -fuzz 30% -transparent white -background white -alpha remove -auto-level \
+    -enhance \
+    -compress lzw \
+    -resample 300 -units PixelsPerInch \
+    output.tiff
+```
+
+#### Image Size Limits
+
+Tesseract has a maximum image dimension limit of 32767 pixels. The preprocessing pipeline automatically handles this by:
+
+1. Checking the image dimensions before resampling
+2. Calculating what the dimensions would be after resampling to target DPI
+3. If the resampled image would exceed the limit, reducing DPI in increments of 50
+4. Minimum DPI is 100; if even 100 DPI would exceed limits, resolution adjustment is skipped
+
+Note: DPI is less important than contrast between text and background for OCR accuracy. Black text on white backgrounds gives the best results.
 
 ### Token-to-Box Mapping
 

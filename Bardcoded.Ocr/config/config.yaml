@@ -19,6 +19,12 @@ preprocessing:
   denoise: true
   deskew: true
   enhance_contrast: true
+  # ImageMagick preprocessing parameters
+  fuzz_percent: 30           # Fuzz percentage for background removal (0-100)
+  deskew_threshold: 40       # Deskew threshold percentage (0-100)
+  contrast_type: sigmoidal   # Contrast enhancement type: sigmoidal, linear, or none
+  contrast_strength: 3       # Contrast strength (sigmoidal: 1-10 typical, linear: ignored)
+  contrast_midpoint: 120     # Contrast midpoint percentage (sigmoidal only: 0-100+)
 
 # Postprocessing
 postprocessing:
