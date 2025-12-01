@@ -1,0 +1,32 @@
+@page "/document-processing"
+@using Bardcoded.Wasm.Components
+
+<PageTitle>Document Processing - Bardcode</PageTitle>
+
+<div class="container mt-4">
+    <h1>Document Processing</h1>
+    <p class="lead">
+        Process document images with OCR and extract structured data. 
+        Adjust preprocessing settings and see the results in real-time.
+    </p>
+    
+    <DocumentProcessingView OnResultAccepted="HandleResultAccepted" />
+    
+    @if (acceptedResult != null)
+    {
+        <div class="alert alert-success mt-4">
+            <h4>Result Accepted!</h4>
+            <p>The OCR result has been saved.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private DocumentProcessingView.InferenceResultDto? acceptedResult;
+    
+    private void HandleResultAccepted(DocumentProcessingView.InferenceResultDto result)
+    {
+        acceptedResult = result;
+        // TODO: Save the result or navigate to inventory
+    }
+}

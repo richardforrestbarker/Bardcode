@@ -1,6 +1,7 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Providers;
 using Bardcoded.ApiService.Controllers;
+using Bardcoded.ApiService.Ocr;
 using Bardcoded.Data;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -56,10 +57,13 @@ builder.Services.AddDbContext<IBarcodeDataContext, BarcodeDataContext>(options =
 builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
 
-// Configure OCR settings
+// Configure OCR settings (legacy receipt processor)
 var ocrConfig = builder.Configuration.GetSection("Ocr").Get<OcrConfiguration>() ?? new OcrConfiguration();
 builder.Services.AddSingleton(ocrConfig);
 builder.Services.AddSingleton<IReceiptProcessor, ReceiptProcessor>();
+
+// Add OCR document processing services (isolated for future extraction)
+builder.Services.AddOcrDocumentProcessing(builder.Configuration);
 
 builder.Services.AddCors();
 
