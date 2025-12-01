@@ -630,6 +630,39 @@ python cli.py process \
   --output result.json
 ```
 
+#### Separate Pipeline Commands
+
+The CLI supports separate commands for each phase of the OCR pipeline, which is useful for the document processing live view feature:
+
+**Preprocess only (without DPI resampling):**
+```bash
+python cli.py preprocess \
+  --image receipt.jpg \
+  --output-format base64 \
+  --deskew \
+  --denoise \
+  --fuzz-percent 30 \
+  --contrast-type sigmoidal
+```
+
+**OCR only (with DPI resampling):**
+```bash
+python cli.py ocr \
+  --image preprocessed.png \
+  --ocr-engine paddle \
+  --target-dpi 300 \
+  --output ocr_result.json
+```
+
+**Inference only (on OCR results):**
+```bash
+python cli.py inference \
+  --ocr-result ocr_result.json \
+  --image preprocessed.png \
+  --model naver-clova-ix/donut-base-finetuned-cord-v2 \
+  --model-type donut
+```
+
 #### CLI Options
 
 | Option | Description | Default |
@@ -760,6 +793,84 @@ OCR settings are configured in `Bardcoded.ApiService/appsettings.json`:
 **Process timeout:**
 - First run downloads models (~500MB), subsequent runs are faster
 - Increase timeout in configuration if using CPU
+
+### Document Processing Live View
+
+The Document Processing Live View feature provides an interactive UI for processing document images with real-time preview of preprocessing effects. This allows users to optimize preprocessing settings before running OCR.
+
+#### Features
+
+- **Side-by-side image comparison**: View original and preprocessed images together
+- **Live preview**: Settings changes trigger automatic preview updates after 5 seconds
+- **Progress indicators**: Timer circle shows countdown; spinner shows API processing
+- **Phased workflow**: Separate preprocessing and OCR phases with navigation
+- **Adjustable settings**: Control deskew, denoise, contrast, and other preprocessing parameters
+
+#### API Endpoints
+
+The document processing API is isolated and can be found in `Bardcoded.ApiService/Ocr/`:
+
+**POST /api/document/preprocess**
+Run preprocessing on an image without DPI resampling. Returns base64 encoded preprocessed image.
+
+Request body:
+```json
+{
+  "imageBase64": "base64-encoded-image-data",
+  "filename": "receipt.jpg",
+  "jobId": "optional-job-id",
+  "denoise": false,
+  "deskew": true,
+  "fuzzPercent": 30,
+  "deskewThreshold": 40,
+  "contrastType": "sigmoidal",
+  "contrastStrength": 3.0,
+  "contrastMidpoint": 120
+}
+```
+
+**POST /api/document/ocr**
+Run OCR on a preprocessed image. Includes DPI resampling and safety checks.
+
+Request body:
+```json
+{
+  "imageBase64": "base64-encoded-preprocessed-image",
+  "jobId": "optional-job-id",
+  "ocrEngine": "paddle",
+  "targetDpi": 300,
+  "device": "auto"
+}
+```
+
+**POST /api/document/inference**
+Run model inference on OCR results to extract structured fields.
+
+Request body:
+```json
+{
+  "ocrResult": { /* OCR result object */ },
+  "imageBase64": "base64-encoded-image",
+  "jobId": "optional-job-id",
+  "model": "naver-clova-ix/donut-base-finetuned-cord-v2",
+  "modelType": "donut",
+  "device": "auto"
+}
+```
+
+**GET /api/document/status/{jobId}**
+Get the status of a document processing job.
+
+#### Using the Live View Component
+
+Navigate to `/document-processing` in the web application to access the document processing live view.
+
+1. **Select an image**: Upload a receipt or document image
+2. **Adjust settings**: Modify preprocessing parameters (deskew, denoise, contrast, etc.)
+3. **Wait for preview**: After 5 seconds of no changes, preprocessing runs automatically
+4. **Accept preprocessing**: Click "Done - Continue to OCR" when satisfied with the preview
+5. **Review OCR results**: View extracted text and fields
+6. **Accept or retry**: Click "Accept Result" or "Go Back" to adjust settings
 
 ### Building the OCR Project
 

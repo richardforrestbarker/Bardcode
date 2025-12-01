@@ -1,5 +1,7 @@
 @using System.Timers
 @using System.Text.Json
+@using System.IO
+@using Microsoft.AspNetCore.Components.Forms
 @inject HttpClient Http
 @inject ILogger<DocumentProcessingView> Logger
 @implements IDisposable
@@ -39,8 +41,8 @@
                         <div class="text-muted p-5">
                             <i class="bi bi-image" style="font-size: 4rem;"></i>
                             <p>No image selected</p>
-                            <label class="btn btn-primary">
-                                <input type="file" accept="image/*" @onchange="HandleFileSelection" hidden />
+                            <InputFile OnChange="HandleFileSelection" accept="image/*" class="form-control" id="imageInput" />
+                            <label for="imageInput" class="btn btn-primary mt-2">
                                 Select Image
                             </label>
                         </div>
@@ -359,12 +361,59 @@
         }
     }
 
-    private async Task HandleFileSelection(ChangeEventArgs e)
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
     {
-        // File input change - read and convert to base64
-        // Note: In a real implementation, you would use InputFile component
-        // This is simplified for demonstration
         errorMessage = null;
+        
+        try
+        {
+            var file = e.File;
+            if (file == null)
+            {
+                return;
+            }
+            
+            // Validate file size (max 10MB)
+            const long maxFileSize = 10 * 1024 * 1024;
+            if (file.Size > maxFileSize)
+            {
+                errorMessage = "File size exceeds 10MB limit";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            
+            // Validate file type
+            if (!file.ContentType.StartsWith("image/"))
+            {
+                errorMessage = "Please select an image file";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            
+            // Read file and convert to base64
+            using var stream = file.OpenReadStream(maxFileSize);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            var bytes = memoryStream.ToArray();
+            sourceImageBase64 = Convert.ToBase64String(bytes);
+            
+            // Clear previous results
+            preprocessedImageBase64 = null;
+            ocrResult = null;
+            inferenceResult = null;
+            currentPhase = ProcessingPhase.Preprocessing;
+            
+            // Trigger preprocessing
+            OnSettingsChanged();
+            
+            Logger.LogInformation("Image selected: {FileName}, {Size} bytes", file.Name, file.Size);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error reading file: {ex.Message}";
+            Logger.LogError(ex, "Error reading file");
+        }
+        
         await InvokeAsync(StateHasChanged);
     }
 
@@ -580,7 +629,17 @@
         currentPhase = ProcessingPhase.Preprocessing;
         ocrResult = null;
         inferenceResult = null;
-        OnSettingsChanged();
+        
+        // Only trigger preprocessing if we don't have a result yet
+        if (string.IsNullOrEmpty(preprocessedImageBase64))
+        {
+            OnSettingsChanged();
+        }
+        else
+        {
+            // Just switch view without re-running preprocessing
+            StateHasChanged();
+        }
     }
 
     private void Reset()

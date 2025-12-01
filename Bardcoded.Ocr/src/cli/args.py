@@ -8,6 +8,16 @@ import argparse
 from typing import Tuple
 
 
+def _add_device_argument(parser: argparse.ArgumentParser) -> None:
+    """Add common device argument to a parser."""
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cuda", "cpu"],
+        default="auto",
+        help="Device for inference (default: auto)"
+    )
+
+
 def _add_preprocessing_arguments(parser: argparse.ArgumentParser) -> None:
     """Add common preprocessing arguments to a parser."""
     parser.add_argument(
@@ -74,12 +84,7 @@ def _add_ocr_arguments(parser: argparse.ArgumentParser) -> None:
         default=300,
         help="Target DPI for image resampling (default: 300)"
     )
-    parser.add_argument(
-        "--device",
-        choices=["auto", "cuda", "cpu"],
-        default="auto",
-        help="Device for inference (default: auto)"
-    )
+    _add_device_argument(parser)
 
 
 def _add_inference_arguments(parser: argparse.ArgumentParser) -> None:
@@ -100,12 +105,7 @@ Types:
   idefics2: Multimodal vision-language model (Apache 2.0, high quality)
   layoutlmv3: Layout-aware token classification (requires OCR first)"""
     )
-    parser.add_argument(
-        "--device",
-        choices=["auto", "cuda", "cpu"],
-        default="auto",
-        help="Device for inference (default: auto)"
-    )
+    _add_device_argument(parser)
 
 
 def create_argument_parser() -> argparse.ArgumentParser:

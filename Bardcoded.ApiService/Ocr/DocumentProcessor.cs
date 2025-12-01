@@ -702,13 +702,16 @@ namespace Bardcoded.ApiService.Ocr
             _logger.LogInformation("Executing: {FileName} {Arguments}", processStartInfo.FileName, processStartInfo.Arguments);
 
             using var process = new Process { StartInfo = processStartInfo };
-            process.Start();
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Failed to start CLI process");
+            }
 
             var outputTask = process.StandardOutput.ReadToEndAsync();
             var errorTask = process.StandardError.ReadToEndAsync();
 
-            // Wait for process with timeout (5 minutes)
-            var completed = process.WaitForExit(300000);
+            // Wait for process with timeout (60 seconds for faster live view feedback)
+            var completed = process.WaitForExit(60000);
 
             var output = await outputTask;
             var error = await errorTask;
@@ -716,7 +719,7 @@ namespace Bardcoded.ApiService.Ocr
             if (!completed)
             {
                 process.Kill();
-                throw new TimeoutException("CLI process timed out after 5 minutes");
+                throw new TimeoutException("CLI process timed out after 60 seconds");
             }
 
             if (!string.IsNullOrWhiteSpace(error))
