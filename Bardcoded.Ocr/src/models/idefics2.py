@@ -18,6 +18,12 @@ from .base import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# Default confidence scores for generated outputs (generation models don't provide real confidence)
+DEFAULT_CONFIDENCE = 0.8
+FALLBACK_CONFIDENCE = 0.5
+
+# Prompt delimiter for extracting generated response
+PROMPT_DELIMITER = "Now analyze this receipt:"
 
 # Prompt template for receipt extraction
 RECEIPT_EXTRACTION_PROMPT = """You are analyzing a receipt image. Extract the following information in JSON format:
@@ -69,7 +75,7 @@ class IDEFICS2Model(BaseModel):
         model_name_or_path: str = "HuggingFaceM4/idefics2-8b",
         device: str = "cpu",
         max_new_tokens: int = 512,
-        load_in_4bit: bool = True
+        load_in_4bit: bool = False
     ):
         """
         Initialize IDEFICS2 model.
@@ -78,6 +84,7 @@ class IDEFICS2Model(BaseModel):
             model_name_or_path: HuggingFace model name or local path
             device: Device to run model on ('cpu' or 'cuda')
             max_new_tokens: Maximum tokens to generate
+            load_in_4bit: Whether to use 4-bit quantization (saves memory, requires GPU)
             load_in_4bit: Whether to use 4-bit quantization (saves memory)
         """
         self.model_name_or_path = model_name_or_path
@@ -250,7 +257,7 @@ class IDEFICS2Model(BaseModel):
         generated_text = self.processor.batch_decode(outputs, skip_special_tokens=True)[0]
         
         # Extract just the generated portion (after the prompt)
-        response = generated_text.split("Now analyze this receipt:")[-1].strip()
+        response = generated_text.split(PROMPT_DELIMITER)[-1].strip()
         
         logger.info(f"IDEFICS2 raw output: {response[:200]}...")
         

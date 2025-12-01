@@ -36,13 +36,13 @@ def get_model(model_type: str, **kwargs):
     Raises:
         ValueError: If model_type is not recognized
     """
-    model_type = model_type.lower()
+    model_type_lower = model_type.lower()
     
-    if model_type == "layoutlmv3":
+    if model_type_lower == "layoutlmv3":
         return LayoutLMv3Model(**kwargs)
-    elif model_type == "donut":
+    elif model_type_lower == "donut":
         return DonutModel(**kwargs)
-    elif model_type == "idefics2":
+    elif model_type_lower == "idefics2":
         return IDEFICS2Model(**kwargs)
     else:
         raise ValueError(

@@ -17,6 +17,13 @@ from .base import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# Default confidence scores for generated outputs (generation models don't provide real confidence)
+DEFAULT_CONFIDENCE = 0.8
+FALLBACK_CONFIDENCE = 0.6
+
+# Task prompt for CORD-v2 fine-tuned model
+CORD_TASK_PROMPT = "<s_cord-v2>"
+
 
 class DonutModel(BaseModel):
     """
@@ -160,9 +167,8 @@ class DonutModel(BaseModel):
         logger.info("Running Donut inference...")
         
         # Prepare decoder input - task prompt for the model
-        task_prompt = "<s_cord-v2>"
         decoder_input_ids = self.processor.tokenizer(
-            task_prompt,
+            CORD_TASK_PROMPT,
             add_special_tokens=False,
             return_tensors="pt"
         ).input_ids.to(self.device)
