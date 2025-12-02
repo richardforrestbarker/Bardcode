@@ -13,7 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 builder.Services.AddFeatureManagement(builder.Configuration.GetRequiredSection("Application:Features"));
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+                .AddOcrControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -61,7 +62,8 @@ builder.Services.AddSingleton(ocrConfig);
 builder.Services.AddSingleton<IReceiptProcessor, ReceiptProcessor>();
 
 // Add OCR document processing services (isolated for future extraction)
-builder.Services.AddOcrDocumentProcessing(builder.Configuration);
+builder.Services.AddOcrDocumentProcessing(builder.Configuration)
+    ;
 
 builder.Services.AddCors();
 

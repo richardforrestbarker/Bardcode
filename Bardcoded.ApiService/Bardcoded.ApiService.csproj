@@ -7,13 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Bardcoded.Data\Bardcoded.Data.csproj" />
-    <ProjectReference Include="..\Bardcoded.ServiceDefaults\Bardcoded.ServiceDefaults.csproj" />
-  <ProjectReference Include="..\..\DocumentProcessor\Data\Data.csproj" />
-  <ProjectReference Include="..\..\DocumentProcessor\Api\Api.csproj" />
-
-  
-	
+	<ProjectReference Include="..\Bardcoded.Data\Bardcoded.Data.csproj" />
+	<ProjectReference Include="..\Bardcoded.ServiceDefaults\Bardcoded.ServiceDefaults.csproj" />
+	<ProjectReference Include="..\..\DocumentProcessor\Api\Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
