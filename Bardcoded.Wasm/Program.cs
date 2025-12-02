@@ -1,8 +1,12 @@
-using Bardcoded.Data.Ocr;
+
 using Bardcoded.Data;
 using Bardcoded.Shaded.Microsoft.AspNetCore.Mvc;
 using Bardcoded.Wasm.Clients;
 using Bardcoded.Wasm.Pages;
+using Clients;
+using DocumentProcessor.Clients;
+using DocumentProcessor.Data.Ocr;
+using DocumentProcessor.Wasm;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,23 +36,9 @@ namespace Bardcoded.Wasm
                 client.BaseAddress = baseAddress;
                 Console.WriteLine($"HTTP Client Base Address: {client.BaseAddress}");
             }).AddHttpMessageHandler<ClientErrorHandlingHttpMessageHandler>();
-            
-            builder.Services.AddHttpClient("document-processing", (serves, client) =>
-            {
-                client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
-                client.Timeout = TimeSpan.FromSeconds(180);
-                client.MaxResponseContentBufferSize = 1024 * 100;
-                if (!Uri.TryCreate("https://localhost:7415", UriKind.Absolute, out var baseAddress))
-                {
-                    Console.WriteLine($"Invalid API URL: {builder.HostEnvironment.BaseAddress}");
-                    throw new InvalidOperationException($"Invalid API URL: {builder.HostEnvironment.BaseAddress}");
-                }
-                client.BaseAddress = baseAddress;
-                Console.WriteLine($"HTTP Client Base Address: {client.BaseAddress}");
-            }).AddHttpMessageHandler<ClientErrorHandlingHttpMessageHandler>();
 
+            builder.Services.AddDocumentProcessorWasmAsync();
 
-            builder.Services.AddScoped<IDocumentProcessor, ClientSideDocumentProcessor>();
 
             builder.Services.AddTransient<JsonSerializerOptions>(sp => new JsonSerializerOptions()
             {

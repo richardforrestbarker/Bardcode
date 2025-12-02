@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bardcoded.Data\Bardcoded.Data.csproj" />
+	  <ProjectReference Include="..\..\DocumentProcessor\Wasm\Wasm.csproj" />
   </ItemGroup>
 
   <ItemGroup>

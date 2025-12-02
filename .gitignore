@@ -61,3 +61,4 @@ Bardcoded.Wasm/wwwroot/lib
 # Receipt OCR temporary files
 temp/receipts/
 *.receipt
+**/temp/

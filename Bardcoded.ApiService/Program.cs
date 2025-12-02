@@ -1,19 +1,20 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Providers;
 using Bardcoded.ApiService.Controllers;
-using Bardcoded.ApiService.Ocr;
-using Bardcoded.Data;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.FeatureManagement;
+using DocumentProcessor.Data;
+using DocumentProcessor.Api.Ocr;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 builder.Services.AddFeatureManagement(builder.Configuration.GetRequiredSection("Application:Features"));
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+                .AddOcrControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -61,7 +62,8 @@ builder.Services.AddSingleton(ocrConfig);
 builder.Services.AddSingleton<IReceiptProcessor, ReceiptProcessor>();
 
 // Add OCR document processing services (isolated for future extraction)
-builder.Services.AddOcrDocumentProcessing(builder.Configuration);
+builder.Services.AddOcrDocumentProcessing(builder.Configuration)
+    ;
 
 builder.Services.AddCors();
 
