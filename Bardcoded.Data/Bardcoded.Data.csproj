@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Ocr\" />
+    <Compile Remove="Ocr\**" />
+    <EmbeddedResource Remove="Ocr\**" />
+    <None Remove="Ocr\**" />
   </ItemGroup>
 
 </Project>
