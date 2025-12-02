@@ -1,8 +1,11 @@
-using Bardcoded.Data.Ocr;
+
 using Bardcoded.Data;
 using Bardcoded.Shaded.Microsoft.AspNetCore.Mvc;
 using Bardcoded.Wasm.Clients;
 using Bardcoded.Wasm.Pages;
+using Clients;
+using DocumentProcessor.Clients;
+using DocumentProcessor.Data.Ocr;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.DependencyInjection;

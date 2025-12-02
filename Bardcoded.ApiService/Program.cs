@@ -1,12 +1,12 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Providers;
 using Bardcoded.ApiService.Controllers;
-using Bardcoded.ApiService.Ocr;
-using Bardcoded.Data;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.FeatureManagement;
+using DocumentProcessor.Data;
+using DocumentProcessor.Api.Ocr;
 
 var builder = WebApplication.CreateBuilder(args);
 
