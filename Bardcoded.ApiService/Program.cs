@@ -1,11 +1,9 @@
 using Bardcoded.ApiService.Data;
 using Bardcoded.ApiService.Providers;
-using Bardcoded.ApiService.Controllers;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.FeatureManagement;
-using DocumentProcessor.Data;
 using DocumentProcessor.Api.Ocr;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,8 +11,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 builder.Services.AddFeatureManagement(builder.Configuration.GetRequiredSection("Application:Features"));
+
 builder.Services.AddControllers()
                 .AddOcrControllers();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -56,14 +56,8 @@ builder.Services.AddDbContext<IBarcodeDataContext, BarcodeDataContext>(options =
 builder.Services.AddSingleton<MemoryCache>();
 builder.Services.AddTransient<BarcodeFetcher>();
 
-// Configure OCR settings (legacy receipt processor)
-var ocrConfig = builder.Configuration.GetSection("Ocr").Get<OcrConfiguration>() ?? new OcrConfiguration();
-builder.Services.AddSingleton(ocrConfig);
-builder.Services.AddSingleton<IReceiptProcessor, ReceiptProcessor>();
-
-// Add OCR document processing services (isolated for future extraction)
-builder.Services.AddOcrDocumentProcessing(builder.Configuration)
-    ;
+// Add OCR document processing services
+builder.Services.AddOcrDocumentProcessing(builder.Configuration);
 
 builder.Services.AddCors();
 
